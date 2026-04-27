@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TwitchSoundBoard – OBS Overlay</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: transparent;
+    }
+
+    #overlay-container {
+      position: relative;
+      width: 100%; height: 100%;
+      pointer-events: none;
+    }
+
+    /* Video-Container fuer lokale MP4 Dateien */
+    #video-container {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      display: none;
+      z-index: 10;
+      width: 854px;
+      height: 480px;
+    }
+    #video-container video {
+      width: 854px;
+      height: 480px;
+      border-radius: 12px;
+    }
+
+    /* YouTube Embed Container (sichtbar fuer YT Videos) */
+    #yt-embed-visible {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 854px;
+      height: 480px;
+      display: none;
+      z-index: 10;
+    }
+    #yt-embed-visible iframe {
+      width: 854px;
+      height: 480px;
+      border: none;
+      border-radius: 12px;
+    }
+
+    /* Audio-Status Indikator */
+    #audio-indicator {
+      display: none;
+      position: fixed;
+      bottom: 8px; right: 8px;
+      background: rgba(0,0,0,0.6);
+      color: #ffa502;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font: 11px/1.4 'Segoe UI', sans-serif;
+      z-index: 9000;
+      pointer-events: none;
+      user-select: none;
+    }
+    #audio-indicator.ok { color: #00b894; }
+
+    /* Debug */
+    #debug-bar {
+      display: none;
+      position: fixed;
+      top: 8px; right: 8px;
+      background: rgba(0,0,0,0.75);
+      color: #00ff88;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font: 11px/1.5 monospace;
+      z-index: 999;
+      pointer-events: none;
+      max-width: 360px;
+      word-break: break-all;
+    }
+
+    #ws-status {
+      position: fixed;
+      top: 8px; left: 8px;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font: 11px monospace;
+      z-index: 999;
+      pointer-events: none;
+      background: rgba(200,0,0,0.3);
+      color: #f44;
+    }
+    #ws-status.ok { background: rgba(0,180,80,0.3); color: #0f8; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translate(-50%,-50%) scale(0.85); }
+      to   { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+    }
+    @keyframes fadeOut {
+      from { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+      to   { opacity: 0; transform: translate(-50%,-50%) scale(1.15); }
+    }
+
+  </style>
+</head>
+<body>
+  <div id="overlay-container">
+    <div id="video-container">
+      <video id="video-player" playsinline></video>
+    </div>
+    <div id="yt-embed-visible"></div>
+  </div>
+
+  <div id="audio-indicator"></div>
+  <div id="debug-bar"></div>
+  <div id="ws-status">&#11044; Connecting...</div>
+
+  <!-- YouTube IFrame API laden -->
+  <script src="https://www.youtube.com/iframe_api"></script>
+
+  <script>
+    // =============================================
+    // TwitchSoundBoard – OBS Overlay v5
+    // YouTube Embed + Lokale Dateien + Queue-Management
+    // =============================================
+
+    var queue = [];
+    var isPlaying = false;
+    var MAX_QUEUE = 10;
+    var currentItem = null; // aktuell abspielendes Item
+
+    // YouTube Player State
+    var ytApiReady = false;
+    var currentYTPlayer = null;
+
+    // Audio unlock
+    var audioUnlocked = false;
+    var SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+
+    // DOM
+    var videoContainer = document.getElementById('video-container');
+    var videoPlayer = document.getElementById('video-player');
+    var ytEmbedVisible = document.getElementById('yt-embed-visible');
+    var debugBar = document.getElementById('debug-bar');
+    var wsStatus = document.getElementById('ws-status');
+    var audioIndicator = document.getElementById('audio-indicator');
+
+    var debug = new URLSearchParams(location.search).has('debug');
+    if (debug) { debugBar.style.display = 'block'; }
+
+    // =============================================
+    // YouTube IFrame API Ready Callback
+    // =============================================
+    window.onYouTubeIframeAPIReady = function() {
+      ytApiReady = true;
+      dbg('YouTube IFrame API bereit');
+    };
+
+    // =============================================
+    // Audio Unlock
+    // =============================================
+    var isOBS = /obs|streamlabs|electron/i.test(navigator.userAgent);
+
+    function tryAutoplayUnlock() {
+      var a = new Audio(SILENT_WAV);
+      a.volume = 0;
+      a.play().then(function() {
+        audioUnlocked = true; a.pause(); a.src = '';
+        updateAudioIndicator(); dbg('Autoplay OK');
+      }).catch(function() {
+        a.src = ''; updateAudioIndicator();
+        dbg('Autoplay blockiert – Klick auf Overlay freischaltet');
+      });
+    }
+
+    function unlockAudio() {
+      if (audioUnlocked) return;
+      var a = new Audio(SILENT_WAV);
+      a.volume = 0;
+      a.play().then(function() {
+        audioUnlocked = true; a.pause(); a.src = '';
+        updateAudioIndicator(); dbg('Audio freigeschaltet');
+      }).catch(function() { a.src = ''; });
+    }
+
+    function updateAudioIndicator() {
+      if (!debug) return;
+      audioIndicator.style.display = 'block';
+      if (audioUnlocked) { audioIndicator.className = 'ok'; audioIndicator.textContent = '\u266B Audio OK'; }
+      else { audioIndicator.className = ''; audioIndicator.textContent = '\u266B Audio blockiert'; }
+    }
+
+    if (isOBS) { audioUnlocked = true; updateAudioIndicator(); dbg('OBS – Autoplay aktiv'); }
+    else { tryAutoplayUnlock(); }
+
+    ['click', 'keydown', 'touchstart', 'pointerdown'].forEach(function(evt) {
+      document.addEventListener(evt, function() {
+        unlockAudio();
+        if (queue.length > 0 && !isPlaying) processQueue();
+      });
+    });
+
+    // =============================================
+    // WebSocket
+    // =============================================
+    function wsUrl() { var p = parseInt(location.port) || 3000; return 'ws://' + location.hostname + ':' + (p + 1); }
+    var ws, reconnects = 0;
+
+    function connect() {
+      dbg('Verbinde: ' + wsUrl());
+      ws = new WebSocket(wsUrl());
+      ws.onopen = function() { reconnects = 0; wsStatus.className = 'ok'; wsStatus.textContent = '\u25CF Connected'; dbg('Verbunden'); };
+      ws.onmessage = function(e) { try { handleMessage(JSON.parse(e.data)); } catch (err) { dbg('Parse-Fehler: ' + err.message); } };
+      ws.onclose = function() { wsStatus.className = 'err'; wsStatus.textContent = '\u25CF Disconnected'; reconnect(); };
+      ws.onerror = function() { ws.close(); };
+    }
+
+    function reconnect() {
+      if (reconnects >= 60) return dbg('Max Reconnects');
+      reconnects++;
+      var ms = Math.min(1000 * Math.pow(1.4, reconnects - 1), 30000);
+      dbg('Reconnect in ' + Math.round(ms / 1000) + 's (#' + reconnects + ')');
+      setTimeout(connect, ms);
+    }
+
+    function handleMessage(data) {
+      if (data.type === 'play') return enqueue(data);
+      if (data.type === 'init' || data.type === 'config_reloaded') return dbg('Config OK');
+      if (data.type === 'queue_skip') return handleSkip();
+      if (data.type === 'queue_clear') return handleClear();
+      if (data.type === 'queue_stop') return handleStop();
+    }
+
+    // =============================================
+    // Queue State Reporting (an Server)
+    // =============================================
+    function getItemLabel(item) {
+      if (!item) return '';
+      if (item.artist && item.title) return item.artist + ' - ' + item.title;
+      if (item.title) return item.title;
+      if (item.embedType) return '[' + item.embedType + '] ' + item.videoId;
+      return item.file || '';
+    }
+
+    function reportQueueState() {
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      try {
+        ws.send(JSON.stringify({
+          type: 'queue_state',
+          state: {
+            isPlaying: isPlaying,
+            current: currentItem ? { file: currentItem.file, mediaType: currentItem.mediaType, embedType: currentItem.embedType, videoId: currentItem.videoId, user: currentItem.user, title: currentItem.title, artist: currentItem.artist, label: getItemLabel(currentItem) } : null,
+            queue: queue.map(function(item) { return { file: item.file, mediaType: item.mediaType, embedType: item.embedType, videoId: item.videoId, user: item.user, title: item.title, artist: item.artist, label: getItemLabel(item) }; })
+          }
+        }));
+      } catch (e) {}
+    }
+
+    // =============================================
+    // Queue Control (vom Server)
+    // =============================================
+    function handleSkip() {
+      dbg('SKIP angefordert');
+      if (!isPlaying) { queue = []; reportQueueState(); return; }
+      skipCurrent = true;
+      if (typeof currentCleanup === 'function') {
+        currentCleanup();
+      } else {
+        finishCurrent();
+      }
+    }
+
+    function handleClear() {
+      dbg('CLEAR angefordert');
+      queue = [];
+      // Aktuelles laeuft weiter, aber Queue ist leer
+      reportQueueState();
+    }
+
+    function handleStop() {
+      dbg('STOP angefordert (alles)');
+      queue = [];
+      if (typeof currentCleanup === 'function') {
+        currentCleanup();
+      } else if (isPlaying) {
+        isPlaying = false;
+        currentItem = null;
+        reportQueueState();
+      }
+    }
+
+    var skipCurrent = false;
+    var currentCleanup = null;
+
+    // =============================================
+    // Queue
+    // =============================================
+    function enqueue(data) {
+      var max = data.maxQueue || MAX_QUEUE;
+      if (queue.length >= max) { dbg('Queue voll (' + max + '), drop'); return; }
+      queue.push(data);
+      var label = data.embedType ? ('[' + data.embedType + '] ' + data.videoId) : data.file;
+      dbg('+ "' + label + '" von ' + (data.user || '?') + ' [' + queue.length + ']');
+      reportQueueState();
+      if (!isPlaying) processQueue();
+    }
+
+    function processQueue() {
+      if (!queue.length) { isPlaying = false; currentItem = null; dbg('Queue leer'); reportQueueState(); return; }
+      isPlaying = true;
+      skipCurrent = false;
+      var item = queue.shift();
+      currentItem = item;
+      var label = getItemLabel(item);
+      dbg('> Spiele: "' + label + '" [Q: ' + queue.length + ']');
+      reportQueueState();
+      try {
+        if (item.embedType) {
+          playEmbed(item);
+        } else if (item.mediaType === 'video') {
+          playVideo(item);
+        } else {
+          playSound(item);
+        }
+      } catch (e) {
+        dbg('Play Exception: ' + e.message);
+        finishCurrent();
+      }
+    }
+
+    function finishCurrent() {
+      if (!isPlaying) return;
+      isPlaying = false;
+      currentItem = null;
+      reportQueueState();
+      setTimeout(function() { processQueue(); }, 120);
+    }
+
+    // =============================================
+    // YouTube Embed Player
+    // =============================================
+    function playEmbed(item) {
+      // Warten bis YouTube API bereit
+      if (!ytApiReady) {
+        dbg('YouTube API nicht bereit, warte...');
+        queue.unshift(item);
+        isPlaying = false;
+        setTimeout(processQueue, 500);
+        return;
+      }
+
+      var done = false;
+      var durTimer = null;
+      var safeTimer = null;
+
+      function cleanup() {
+        if (done) return; done = true;
+        clearTimeout(durTimer);
+        clearTimeout(safeTimer);
+
+        // YT Player zerstoeren
+        if (currentYTPlayer) {
+          try { currentYTPlayer.destroy(); } catch(e) {}
+          currentYTPlayer = null;
+        }
+
+        // Container verstecken
+        ytEmbedVisible.style.display = 'none';
+        ytEmbedVisible.innerHTML = '';
+
+        dbg('Embed done: ' + item.videoId);
+        finishCurrent();
+      }
+      currentCleanup = cleanup;
+
+      // Safety-Timeout
+      var dur = item.durationOverride;
+      var safetyMs = (dur && dur > 0) ? (dur + 15000) : 600000; // 10 Min fuer Video
+
+      safeTimer = setTimeout(function() {
+        dbg('Embed safety timeout: ' + item.videoId);
+        cleanup();
+      }, safetyMs);
+
+      // Duration Override Timer (wenn gesetzt)
+      if (dur && dur > 0) {
+        durTimer = setTimeout(function() {
+          dbg('Embed cut@' + dur + 'ms: ' + item.videoId);
+          cleanup();
+        }, dur);
+      }
+
+      // YouTube: Sichtbares Video Embed
+      ytEmbedVisible.style.display = 'block';
+      ytEmbedVisible.innerHTML = '';
+
+      var playerDiv = document.createElement('div');
+      playerDiv.id = 'yt-visible-' + Date.now();
+      playerDiv.style.cssText = 'width:854px;height:480px;';
+      ytEmbedVisible.appendChild(playerDiv);
+
+      currentYTPlayer = new YT.Player(playerDiv.id, {
+        videoId: item.videoId,
+        width: 854, height: 480,
+        playerVars: {
+          autoplay: 1,
+          controls: 0,
+          modestbranding: 1,
+          rel: 0,
+          showinfo: 0,
+          iv_load_policy: 3,
+          fs: 0,
+          disablekb: 1
+        },
+        events: {
+          onReady: function(e) { e.target.setVolume(Math.round((item.volume != null ? item.volume : 0.5) * 100)); e.target.playVideo(); dbg('YT Embed spielt: ' + item.videoId); },
+          onStateChange: function(e) { if (e.data === YT.PlayerState.ENDED) { dbg('YT Embed ended: ' + item.videoId); cleanup(); } },
+          onError: function(e) { dbg('YT Embed Error ' + e.data + ': ' + item.videoId); cleanup(); }
+        }
+      });
+    }
+
+    // =============================================
+    // Sound Player (lokale Dateien)
+    // =============================================
+    function playSound(item) {
+      var done = false, playStarted = false, durTimer = null, safeTimer = null;
+      var audio = new Audio('/media/sounds/' + item.file);
+      audio.volume = (item.volume != null ? item.volume : 0.8);
+
+      function cleanup() {
+        if (done) return; done = true;
+        clearTimeout(durTimer); clearTimeout(safeTimer);
+        try { audio.pause(); } catch(e) {}
+        audio.oncanplay = null; audio.oncanplaythrough = null; audio.onloadeddata = null;
+        audio.onerror = null; audio.onended = null; audio.onstalled = null;
+        audio.removeAttribute('src'); audio.load();
+        dbg('Sound done: "' + item.file + '"'); finishCurrent();
+      }
+      currentCleanup = cleanup;
+
+      function attemptPlay() {
+        if (done || playStarted) return; playStarted = true;
+        audio.play().then(function() {
+          dbg('Sound spielt: "' + item.file + '"');
+          if (item.durationOverride && item.durationOverride > 0) {
+            durTimer = setTimeout(function() { dbg('Sound cut@' + item.durationOverride + 'ms'); cleanup(); }, item.durationOverride);
+          }
+        }).catch(function(err) {
+          if (!audioUnlocked) dbg('AUDIO BLOCKIERT – Klick!'); else dbg('Play rejected: ' + err.message);
+          cleanup();
+        });
+      }
+
+      function onReady() { if (!done) attemptPlay(); }
+
+      safeTimer = setTimeout(function() { dbg('SAFETY TIMEOUT sound'); cleanup(); }, 120000);
+      audio.addEventListener('canplaythrough', onReady, { once: true });
+      audio.addEventListener('loadeddata', onReady, { once: true });
+      audio.addEventListener('canplay', onReady, { once: true });
+      audio.addEventListener('ended', function() { cleanup(); }, { once: true });
+      audio.addEventListener('error', function() { dbg('Fehlt: ' + item.file); cleanup(); }, { once: true });
+      audio.addEventListener('stalled', function() { setTimeout(function() { if (!done) { dbg('Stalled'); cleanup(); } }, 3000); }, { once: true });
+      audio.load();
+      setTimeout(function() { if (!done && !playStarted && audio.readyState >= 2) attemptPlay(); }, 1500);
+      setTimeout(function() { if (!done && !playStarted) { dbg('Fallback timeout'); cleanup(); } }, 3000);
+    }
+
+    // =============================================
+    // Video Player (lokale Dateien)
+    // =============================================
+    function playVideo(item) {
+      var done = false, playStarted = false, durTimer = null, safeTimer = null;
+
+      function cleanup() {
+        if (done) return; done = true;
+        clearTimeout(durTimer); clearTimeout(safeTimer);
+        videoPlayer.oncanplaythrough = null; videoPlayer.onloadeddata = null;
+        videoPlayer.oncanplay = null; videoPlayer.onerror = null;
+        videoPlayer.onended = null; videoPlayer.onstalled = null;
+        hideVideo();
+        dbg('Video done: "' + item.file + '"'); finishCurrent();
+      }
+      currentCleanup = cleanup;
+
+      function attemptPlay() {
+        if (done || playStarted) return; playStarted = true;
+        videoPlayer.play().then(function() {
+          dbg('Video spielt: "' + item.file + '"');
+          if (item.durationOverride && item.durationOverride > 0) {
+            durTimer = setTimeout(function() { dbg('Video cut@' + item.durationOverride + 'ms'); cleanup(); }, item.durationOverride);
+          }
+        }).catch(function(err) { dbg('Video rejected: ' + err.message); cleanup(); });
+      }
+
+      function onReady() { if (!done) attemptPlay(); }
+
+      var dur = item.durationOverride;
+      var safetyMs = (dur && dur > 0) ? dur + 15000 : 600000;
+      safeTimer = setTimeout(function() { dbg('SAFETY TIMEOUT video'); cleanup(); }, safetyMs);
+
+      videoPlayer.src = '/media/videos/' + item.file;
+      videoPlayer.volume = (item.volume != null ? item.volume : 0.5);
+      videoPlayer.currentTime = 0;
+      videoContainer.style.display = 'block';
+      videoContainer.style.animation = 'fadeIn 0.2s ease-out';
+
+      videoPlayer.addEventListener('canplaythrough', onReady, { once: true });
+      videoPlayer.addEventListener('loadeddata', onReady, { once: true });
+      videoPlayer.addEventListener('canplay', onReady, { once: true });
+      videoPlayer.addEventListener('ended', function() { cleanup(); }, { once: true });
+      videoPlayer.addEventListener('error', function() { dbg('Fehlt: ' + item.file); cleanup(); }, { once: true });
+      videoPlayer.addEventListener('stalled', function() { setTimeout(function() { if (!done) { dbg('Video stalled'); cleanup(); } }, 3000); }, { once: true });
+      videoPlayer.load();
+      setTimeout(function() { if (!done && !playStarted && videoPlayer.readyState >= 2) attemptPlay(); }, 1500);
+      setTimeout(function() { if (!done && !playStarted) { dbg('Video fallback timeout'); cleanup(); } }, 3000);
+    }
+
+    function hideVideo() {
+      videoContainer.style.animation = 'fadeOut 0.3s ease-in forwards';
+      setTimeout(function() {
+        videoContainer.style.display = 'none';
+        videoPlayer.pause(); videoPlayer.removeAttribute('src'); videoPlayer.load();
+      }, 300);
+    }
+
+    // =============================================
+    // Debug
+    // =============================================
+    function dbg(msg) {
+      var line = '[' + new Date().toLocaleTimeString('de-DE') + '] ' + msg;
+      console.log(line);
+      if (debug) debugBar.textContent = line;
+    }
+
+    // =============================================
+    // Start
+    // =============================================
+    dbg('Overlay v4 geladen (Dateien + Embed)');
+    connect();
+  </script>
+</body>
+</html>

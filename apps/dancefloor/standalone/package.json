@@ -1,0 +1,13 @@
+{
+  "name": "twitch-dancefloor",
+  "version": "0.0.1",
+  "description": "OBS Music Reactive Light Show Overlay with Twitch Chat Commands",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "socket.io": "^4.7.0",
+    "ws": "^8.16.0"
+  }
+}

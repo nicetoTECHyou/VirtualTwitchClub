@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Virtual Twitch Club</title>
+  <style>
+    /* ── Reset & Base ─────────────────────────────── */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+    }
+
+    /* ── Tab Bar ─────────────────────────────────── */
+    .tab-bar {
+      display: flex;
+      height: 42px;
+      background: #16213e;
+      border-bottom: 2px solid #0f3460;
+      -webkit-app-region: drag;
+      user-select: none;
+    }
+    .tab {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 20px;
+      height: 100%;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      color: #888;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s ease;
+      -webkit-app-region: no-drag;
+      white-space: nowrap;
+    }
+    .tab:hover { color: #bbb; background: rgba(255,255,255,0.05); }
+    .tab.active {
+      color: #fff;
+      border-bottom: 2px solid #e94560;
+      background: rgba(233,69,96,0.1);
+    }
+    .tab .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #555;
+      transition: background 0.3s;
+    }
+    .tab .status-dot.running { background: #00ff88; box-shadow: 0 0 6px #00ff88; }
+    .tab .status-dot.starting { background: #ffaa00; box-shadow: 0 0 6px #ffaa00; animation: pulse 1s infinite; }
+    .tab .status-dot.error { background: #ff4444; box-shadow: 0 0 6px #ff4444; }
+
+    .tab-spacer { flex: 1; -webkit-app-region: drag; }
+
+    .tab-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 0 8px;
+      -webkit-app-region: no-drag;
+    }
+    .tab-btn {
+      padding: 4px 12px;
+      border: 1px solid #333;
+      border-radius: 4px;
+      background: transparent;
+      color: #aaa;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tab-btn:hover { background: #e94560; color: #fff; border-color: #e94560; }
+    .tab-btn.danger:hover { background: #ff4444; }
+
+    /* ── Tab Content Area ────────────────────────── */
+    .tab-content {
+      position: relative;
+      height: calc(100vh - 42px - 28px);
+      background: #0f0f23;
+    }
+    .tab-content iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      display: none;
+    }
+    .tab-content iframe.active { display: block; }
+
+    /* ── Status Bar (shows server status & errors) ── */
+    .status-bar {
+      height: 28px;
+      background: #0d1117;
+      border-top: 1px solid #21262d;
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      font-size: 11px;
+      color: #8b949e;
+      gap: 16px;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+    .status-bar .status-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .status-bar .status-item .dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #555;
+    }
+    .status-bar .status-item .dot.running { background: #00ff88; }
+    .status-bar .status-item .dot.starting { background: #ffaa00; animation: pulse 1s infinite; }
+    .status-bar .status-item .dot.error { background: #ff4444; }
+    .status-bar .status-item .dot.stopped { background: #555; }
+    .status-bar .status-error {
+      color: #ff6666;
+      max-width: 600px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .status-bar .spacer { flex: 1; }
+    .status-bar button {
+      background: none;
+      border: 1px solid #333;
+      color: #8b949e;
+      font-size: 10px;
+      padding: 1px 8px;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    .status-bar button:hover { background: #e94560; color: #fff; border-color: #e94560; }
+
+    /* ── Setup Wizard Overlay ────────────────────── */
+    .setup-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: #1a1a2e;
+      z-index: 1000;
+      display: none;
+      justify-content: center;
+      align-items: center;
+    }
+    .setup-overlay.visible { display: flex; }
+
+    .setup-card {
+      background: #16213e;
+      border-radius: 16px;
+      padding: 40px;
+      width: 520px;
+      max-width: 90vw;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+
+    .setup-card h1 {
+      font-size: 28px;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, #e94560, #ff6b8a);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .setup-card .subtitle {
+      color: #888;
+      font-size: 14px;
+      margin-bottom: 30px;
+    }
+
+    .setup-step { display: none; }
+    .setup-step.active { display: block; }
+
+    .step-indicator { display: flex; gap: 8px; margin-bottom: 24px; }
+    .step-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: #333;
+      transition: background 0.3s;
+    }
+    .step-dot.active { background: #e94560; }
+    .step-dot.done { background: #00ff88; }
+
+    .form-group { margin-bottom: 18px; }
+    .form-group label {
+      display: block; font-size: 13px; color: #aaa;
+      margin-bottom: 6px; font-weight: 500;
+    }
+    .form-group input {
+      width: 100%; padding: 10px 14px;
+      border: 1px solid #333; border-radius: 8px;
+      background: #0f0f23; color: #fff; font-size: 14px;
+      outline: none; transition: border-color 0.2s;
+    }
+    .form-group input:focus { border-color: #e94560; }
+    .form-group input::placeholder { color: #555; }
+    .form-hint { font-size: 11px; color: #666; margin-top: 4px; }
+    .form-hint a { color: #e94560; text-decoration: none; cursor: pointer; }
+    .form-hint a:hover { text-decoration: underline; }
+
+    .node-status {
+      padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 13px;
+    }
+    .node-status.found { background: rgba(0,255,136,0.1); border: 1px solid rgba(0,255,136,0.3); color: #00ff88; }
+    .node-status.missing { background: rgba(255,68,68,0.1); border: 1px solid rgba(255,68,68,0.3); color: #ff6666; }
+
+    .btn {
+      padding: 12px 24px; border: none; border-radius: 8px;
+      font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #e94560, #ff6b8a); color: #fff; width: 100%;
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(233,69,96,0.4); }
+    .btn-primary:disabled { background: #333; color: #666; cursor: not-allowed; transform: none; box-shadow: none; }
+    .btn-secondary { background: transparent; color: #aaa; border: 1px solid #333; margin-right: 8px; }
+    .btn-secondary:hover { background: rgba(255,255,255,0.05); }
+    .btn-row { display: flex; justify-content: space-between; margin-top: 24px; }
+
+    /* ── OBS Guide Modal ─────────────────────────── */
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.7); z-index: 900;
+      display: none; justify-content: center; align-items: center;
+    }
+    .modal-overlay.visible { display: flex; }
+    .modal {
+      background: #16213e; border-radius: 16px; padding: 30px;
+      width: 600px; max-width: 90vw; max-height: 80vh;
+      overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+    .modal h2 { font-size: 22px; margin-bottom: 20px; color: #fff; }
+    .modal h3 { font-size: 16px; margin: 16px 0 8px; color: #e94560; }
+    .obs-step { display: flex; gap: 12px; margin-bottom: 14px; padding: 12px; background: rgba(255,255,255,0.03); border-radius: 8px; }
+    .obs-step-num {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: #e94560; color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 700; flex-shrink: 0;
+    }
+    .obs-step-content { flex: 1; font-size: 13px; line-height: 1.5; }
+    .obs-step-content code { display: block; background: #0f0f23; padding: 8px 12px; border-radius: 6px; margin-top: 6px; font-family: 'Consolas', monospace; font-size: 12px; color: #00ff88; }
+    .url-list { margin: 16px 0; }
+    .url-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: #0f0f23; border-radius: 8px; margin-bottom: 8px; }
+    .url-item-label { font-weight: 600; font-size: 13px; min-width: 140px; }
+    .url-item-url { font-family: 'Consolas', monospace; font-size: 12px; color: #00ff88; flex: 1; text-align: center; }
+    .url-item-copy { padding: 4px 12px; background: #333; border: none; border-radius: 4px; color: #fff; font-size: 11px; cursor: pointer; }
+    .url-item-copy:hover { background: #e94560; }
+    .modal-close { float: right; background: none; border: none; color: #888; font-size: 20px; cursor: pointer; }
+    .modal-close:hover { color: #fff; }
+
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+  </style>
+</head>
+<body>
+
+  <!-- Tab Bar -->
+  <div class="tab-bar">
+    <div class="tab active" data-tab="dancers" onclick="switchTab('dancers')">
+      <span class="status-dot" id="dot-dancers"></span>
+      Club Dancers
+    </div>
+    <div class="tab" data-tab="soundboard" onclick="switchTab('soundboard')">
+      <span class="status-dot" id="dot-soundboard"></span>
+      SoundBoard
+    </div>
+    <div class="tab" data-tab="dancefloor" onclick="switchTab('dancefloor')">
+      <span class="status-dot" id="dot-dancefloor"></span>
+      Dancefloor
+    </div>
+
+    <div class="tab-spacer"></div>
+
+    <div class="tab-actions">
+      <button class="tab-btn" onclick="openOBSGuide()" title="OBS Setup Guide">OBS Guide</button>
+      <button class="tab-btn" onclick="copyAllOBSUrls()" title="OBS URLs kopieren">URLs</button>
+      <button class="tab-btn danger" onclick="stopAllAndQuit()" title="Beenden">Beenden</button>
+    </div>
+  </div>
+
+  <!-- Tab Content: iframes for each service admin panel -->
+  <div class="tab-content" id="tab-content">
+    <iframe id="frame-dancers" data-tab="dancers" class="active" allow="microphone; camera; autoplay; display-capture; clipboard-read; clipboard-sanitized-write"></iframe>
+    <iframe id="frame-soundboard" data-tab="soundboard" allow="microphone; camera; autoplay; display-capture; clipboard-read; clipboard-sanitized-write"></iframe>
+    <iframe id="frame-dancefloor" data-tab="dancefloor" allow="microphone; camera; autoplay; display-capture; clipboard-read; clipboard-sanitized-write"></iframe>
+  </div>
+
+  <!-- Status Bar: shows real server status -->
+  <div class="status-bar">
+    <span id="status-dancers" class="status-item"><span class="dot stopped"></span> Dancers :3333</span>
+    <span id="status-soundboard" class="status-item"><span class="dot stopped"></span> SoundBoard :3000</span>
+    <span id="status-dancefloor" class="status-item"><span class="dot stopped"></span> Dancefloor :3131</span>
+    <span class="spacer"></span>
+    <span id="status-error" class="status-error"></span>
+    <button onclick="openInBrowser()">Im Browser oeffnen</button>
+    <button onclick="showDebugInfo()">Debug</button>
+  </div>
+
+  <!-- Setup Wizard -->
+  <div class="setup-overlay" id="setup-overlay">
+    <div class="setup-card">
+      <h1>Virtual Twitch Club</h1>
+      <p class="subtitle">Ersteinrichtung - Los geht's!</p>
+
+      <div class="step-indicator" id="step-indicator">
+        <div class="step-dot active" data-step="0"></div>
+        <div class="step-dot" data-step="1"></div>
+        <div class="step-dot" data-step="2"></div>
+        <div class="step-dot" data-step="3"></div>
+      </div>
+
+      <!-- Step 0: Node.js Check -->
+      <div class="setup-step active" id="step-0">
+        <h3 style="margin-bottom:16px;color:#fff;">1. System-Check</h3>
+        <div id="node-check-result" class="node-status missing">
+          Pruefe Node.js Installation...
+        </div>
+        <div id="node-actions" style="display:none;">
+          <p style="color:#aaa;font-size:13px;margin-bottom:16px;">
+            Node.js wird benoetigt um die Server zu betreiben.<br>
+            Klicke auf "Herunterladen" um Node.js zu installieren.
+          </p>
+          <button class="btn btn-primary" id="btn-download-node" onclick="downloadNodeJS()">
+            Node.js herunterladen & installieren
+          </button>
+        </div>
+        <div class="btn-row">
+          <div></div>
+          <button class="btn btn-primary" id="btn-step0-next" onclick="nextStep()" disabled>
+            Weiter
+          </button>
+        </div>
+      </div>
+
+      <!-- Step 1: Twitch Channel -->
+      <div class="setup-step" id="step-1">
+        <h3 style="margin-bottom:16px;color:#fff;">2. Twitch Kanal</h3>
+        <div class="form-group">
+          <label>Twitch Kanalname</label>
+          <input type="text" id="input-channel" placeholder="DeinTwitchKanal">
+        </div>
+        <div class="form-group">
+          <label>Bot Benutzername (optional)</label>
+          <input type="text" id="input-bot" placeholder="z.B. DeinKanalBot">
+          <p class="form-hint">Wenn leer, wird der Kanalname verwendet.</p>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="prevStep()">Zurueck</button>
+          <button class="btn btn-primary" onclick="nextStep()">Weiter</button>
+        </div>
+      </div>
+
+      <!-- Step 2: OAuth Token -->
+      <div class="setup-step" id="step-2">
+        <h3 style="margin-bottom:16px;color:#fff;">3. Twitch OAuth Token</h3>
+        <div class="form-group">
+          <label>OAuth Token</label>
+          <input type="password" id="input-token" placeholder="oauth:xxxxxxxxxxxxxxxxxx">
+          <p class="form-hint">
+            <a onclick="openTokenGenerator()">Token hier generieren</a>
+            (Benutzername: dein Bot-Name, Scopes: chat:read, chat:write)
+          </p>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="prevStep()">Zurueck</button>
+          <button class="btn btn-primary" onclick="nextStep()">Weiter</button>
+        </div>
+      </div>
+
+      <!-- Step 3: Ready -->
+      <div class="setup-step" id="step-3">
+        <h3 style="margin-bottom:16px;color:#fff;">4. Fertig!</h3>
+        <p style="color:#aaa;font-size:14px;margin-bottom:20px;">
+          Alles ist eingerichtet. Die Services werden jetzt gestartet.<br>
+          Du kannst jederzeit ueber die Tabs auf die Admin-Panels zugreifen.
+        </p>
+        <button class="btn btn-primary" onclick="finishSetup()">
+          Virtual Twitch Club starten
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- OBS Guide Modal -->
+  <div class="modal-overlay" id="obs-modal">
+    <div class="modal">
+      <button class="modal-close" onclick="closeOBSGuide()">&times;</button>
+      <h2>OBS Setup Guide</h2>
+      <p style="color:#aaa;font-size:13px;margin-bottom:16px;">
+        Folge diesen Schritten um die Overlays in OBS Studio hinzuzufuegen.
+      </p>
+
+      <h3>OBS Overlay URLs</h3>
+      <div class="url-list" id="obs-url-list"></div>
+
+      <h3>Schritt-fuer-Schritt Anleitung</h3>
+
+      <div class="obs-step">
+        <div class="obs-step-num">1</div>
+        <div class="obs-step-content">Oeffne <strong>OBS Studio</strong></div>
+      </div>
+      <div class="obs-step">
+        <div class="obs-step-num">2</div>
+        <div class="obs-step-content">Klicke unter <strong>"Quellen"</strong> auf das <strong>+</strong> Symbol</div>
+      </div>
+      <div class="obs-step">
+        <div class="obs-step-num">3</div>
+        <div class="obs-step-content">Waehle <strong>"Browser"</strong> und klicke auf <strong>OK</strong></div>
+      </div>
+      <div class="obs-step">
+        <div class="obs-step-num">4</div>
+        <div class="obs-step-content">Gib einen Namen ein (z.B. "Club Dancers") und klicke auf <strong>OK</strong></div>
+      </div>
+      <div class="obs-step">
+        <div class="obs-step-num">5</div>
+        <div class="obs-step-content">Trage die URL ein: <code>http://localhost:3333</code></div>
+      </div>
+      <div class="obs-step">
+        <div class="obs-step-num">6</div>
+        <div class="obs-step-content">Setze <strong>Breite: 1920</strong> und <strong>Hoehe: 1080</strong></div>
+      </div>
+      <div class="obs-step">
+        <div class="obs-step-num">7</div>
+        <div class="obs-step-content">Wiederhole die Schritte 2-6 fuer alle 3 Overlays (siehe URLs oben)</div>
+      </div>
+
+      <h3>Tipp</h3>
+      <p style="color:#aaa;font-size:13px;">
+        Die Reihenfolge der Browser-Quellen in OBS bestimmt, welches Overlay im Vordergrund steht.
+        Zieh die Quellen einfach um sie neu anzuordnen.
+      </p>
+    </div>
+  </div>
+
+  <script>
+    // ── State ──────────────────────────────────────
+    let currentStep = 0;
+    let servicesStatus = {};
+    let activeTab = 'dancers';
+    let setupDone = false;
+    let retryTimers = {};
+
+    // Tab URLs (admin panels)
+    const tabUrls = {
+      dancers: 'http://localhost:3333/admin',
+      soundboard: 'http://localhost:3000/admin',
+      dancefloor: 'http://localhost:3131/admin.html'
+    };
+
+    // ── Tab Management (iframe-based) ─────────────
+    function switchTab(tabKey) {
+      activeTab = tabKey;
+
+      // Update tab bar
+      document.querySelectorAll('.tab[data-tab]').forEach(t => t.classList.remove('active'));
+      document.querySelector(`.tab[data-tab="${tabKey}"]`)?.classList.add('active');
+
+      // Show the right iframe
+      document.querySelectorAll('.tab-content iframe').forEach(f => f.classList.remove('active'));
+      const frame = document.getElementById(`frame-${tabKey}`);
+      if (frame) {
+        frame.classList.add('active');
+        // Load URL if needed
+        const svc = servicesStatus[tabKey];
+        const url = tabUrls[tabKey];
+        if (svc && svc.status === 'running') {
+          // Reload if URL changed or empty
+          try {
+            const currentUrl = frame.contentWindow?.location?.href;
+            if (!currentUrl || !currentUrl.startsWith(url)) {
+              frame.src = url;
+            }
+          } catch(e) {
+            frame.src = url;
+          }
+        } else {
+          // Server not running - load URL anyway (will show connection refused in iframe)
+          frame.src = url;
+        }
+      }
+    }
+
+    // ── Status Updates ────────────────────────────
+    window.launcher.onStatusUpdate((status) => {
+      const prev = servicesStatus;
+      servicesStatus = status;
+      updateStatusUI(prev);
+    });
+
+    function updateStatusUI(prev) {
+      // Update tab dots
+      for (const [key, info] of Object.entries(servicesStatus)) {
+        const dot = document.getElementById(`dot-${key}`);
+        if (dot) {
+          dot.className = 'status-dot';
+          if (info.status === 'running') dot.classList.add('running');
+          else if (info.status === 'starting') dot.classList.add('starting');
+          else if (info.status === 'error') dot.classList.add('error');
+        }
+
+        // Update status bar
+        const bar = document.getElementById(`status-${key}`);
+        if (bar) {
+          const dotEl = bar.querySelector('.dot');
+          if (dotEl) dotEl.className = 'dot ' + info.status;
+          bar.lastChild.textContent = ` ${info.name} :${info.port}`;
+        }
+
+        // Auto-reload iframe when service becomes running
+        if (info.status === 'running' && prev[key]?.status !== 'running' && activeTab === key) {
+          const frame = document.getElementById(`frame-${key}`);
+          if (frame) frame.src = tabUrls[key];
+        }
+      }
+
+      // Show first error in status bar
+      const errors = Object.values(servicesStatus).filter(s => s.status === 'error');
+      const errEl = document.getElementById('status-error');
+      if (errors.length > 0 && errEl) {
+        errEl.textContent = errors.map(s => s.log || 'Fehler').join(' | ');
+      } else if (errEl) {
+        errEl.textContent = '';
+      }
+    }
+
+    // ── Setup Wizard ──────────────────────────────
+    window.launcher.onShowSetup(() => {
+      document.getElementById('setup-overlay').classList.add('visible');
+      currentStep = 0;
+      updateSteps();
+      checkNodeJS();
+    });
+
+    function updateSteps() {
+      document.querySelectorAll('.setup-step').forEach(s => s.classList.remove('active'));
+      document.getElementById(`step-${currentStep}`)?.classList.add('active');
+      document.querySelectorAll('.step-dot').forEach(d => {
+        const step = parseInt(d.dataset.step);
+        d.className = 'step-dot';
+        if (step < currentStep) d.classList.add('done');
+        else if (step === currentStep) d.classList.add('active');
+      });
+    }
+
+    function nextStep() {
+      if (currentStep === 0) {
+        const btn = document.getElementById('btn-step0-next');
+        if (btn && btn.disabled) return;
+      }
+      if (currentStep === 1) {
+        const channel = document.getElementById('input-channel').value.trim();
+        if (!channel) { document.getElementById('input-channel').style.borderColor = '#ff4444'; return; }
+        document.getElementById('input-channel').style.borderColor = '#333';
+      }
+      if (currentStep === 2) {
+        const token = document.getElementById('input-token').value.trim();
+        if (!token) { document.getElementById('input-token').style.borderColor = '#ff4444'; return; }
+        document.getElementById('input-token').style.borderColor = '#333';
+      }
+      currentStep++;
+      updateSteps();
+    }
+
+    function prevStep() {
+      if (currentStep > 0) { currentStep--; updateSteps(); }
+    }
+
+    async function checkNodeJS() {
+      const result = await window.launcher.checkNode();
+      const el = document.getElementById('node-check-result');
+      const actions = document.getElementById('node-actions');
+      const btn = document.getElementById('btn-step0-next');
+      if (result.found) {
+        el.className = 'node-status found';
+        el.textContent = `Node.js gefunden: ${result.version}`;
+        actions.style.display = 'none';
+        btn.disabled = false;
+      } else {
+        el.className = 'node-status missing';
+        el.textContent = 'Node.js nicht gefunden!';
+        actions.style.display = 'block';
+        btn.disabled = true;
+      }
+    }
+
+    async function downloadNodeJS() {
+      const btn = document.getElementById('btn-download-node');
+      btn.disabled = true;
+      btn.textContent = 'Wird heruntergeladen...';
+      const result = await window.launcher.downloadNode();
+      if (result.ok) {
+        btn.textContent = 'Installation starten...';
+        window.launcher.runInstaller(result.path);
+        window.launcher.onInstallerComplete((res) => {
+          if (res.code === 0) {
+            btn.textContent = 'Installiert! Pruefe...';
+            setTimeout(checkNodeJS, 2000);
+          } else {
+            btn.textContent = 'Fehler bei Installation. Erneut versuchen.';
+            btn.disabled = false;
+          }
+        });
+      } else {
+        btn.textContent = 'Fehler. Bitte Node.js manuell installieren.';
+        btn.disabled = false;
+      }
+    }
+
+    async function finishSetup() {
+      const config = {
+        channel: document.getElementById('input-channel').value.trim(),
+        botUsername: document.getElementById('input-bot').value.trim(),
+        oauthToken: document.getElementById('input-token').value.trim()
+      };
+      await window.launcher.saveConfig(config);
+      document.getElementById('setup-overlay').classList.remove('visible');
+      setupDone = true;
+      window.launcher.startAll();
+      // Show dancers tab after a brief delay
+      setTimeout(() => switchTab('dancers'), 2000);
+    }
+
+    // ── Open in Browser (fallback) ────────────────
+    function openInBrowser() {
+      const url = tabUrls[activeTab];
+      if (url) window.launcher.openExternal(url);
+    }
+
+    // ── Debug Info ────────────────────────────────
+    async function showDebugInfo() {
+      try {
+        const info = await window.launcher.getDebugInfo();
+        const lines = [
+          '=== Virtual Twitch Club Debug ===',
+          'Packaged: ' + info.isPackaged,
+          'Electron: ' + info.electronVersion,
+          'Node: ' + info.nodeVersion,
+          'Platform: ' + info.platform + ' ' + info.arch,
+          'ExecPath: ' + info.execPath,
+          'ResourcesPath: ' + info.resourcesPath,
+          'AppsDir: ' + info.appsDir,
+          'AppsDir exists: ' + info.pathExists.apps_dir,
+          'Apps contents: ' + (info.pathExists.apps_contents || []).join(', '),
+          '',
+          '--- Dancers ---',
+          '  Script exists: ' + info.pathExists.dancers_script,
+          '  node_modules: ' + info.pathExists.dancers_node_modules,
+          '  package.json: ' + info.pathExists.dancers_package_json,
+          '--- SoundBoard ---',
+          '  Script exists: ' + info.pathExists.soundboard_script,
+          '  node_modules: ' + info.pathExists.soundboard_node_modules,
+          '  package.json: ' + info.pathExists.soundboard_package_json,
+          '--- Dancefloor ---',
+          '  Script exists: ' + info.pathExists.dancefloor_script,
+          '  node_modules: ' + info.pathExists.dancefloor_node_modules,
+          '  package.json: ' + info.pathExists.dancefloor_package_json,
+          '',
+          '--- Services ---',
+        ];
+        for (const [key, s] of Object.entries(servicesStatus)) {
+          lines.push(`  ${key}: status=${s.status} log=${(s.log || '').substring(0, 100)}`);
+        }
+        alert(lines.join('\n'));
+      } catch(e) {
+        alert('Debug error: ' + e.message);
+      }
+    }
+
+    // ── OBS Guide ─────────────────────────────────
+    function openOBSGuide() {
+      loadOBSUrls();
+      document.getElementById('obs-modal').classList.add('visible');
+    }
+    function closeOBSGuide() {
+      document.getElementById('obs-modal').classList.remove('visible');
+    }
+    async function loadOBSUrls() {
+      const urls = await window.launcher.getOBSUrls();
+      const list = document.getElementById('obs-url-list');
+      list.innerHTML = '';
+      for (const [key, info] of Object.entries(urls)) {
+        const item = document.createElement('div');
+        item.className = 'url-item';
+        item.innerHTML = `
+          <span class="url-item-label">${info.label}</span>
+          <span class="url-item-url">${info.url}</span>
+          <button class="url-item-copy" onclick="copyUrl('${info.url}', this)">Kopieren</button>
+        `;
+        list.appendChild(item);
+      }
+    }
+    async function copyUrl(url, btn) {
+      await window.launcher.copyToClipboard(url);
+      btn.textContent = 'Kopiert!';
+      setTimeout(() => { btn.textContent = 'Kopieren'; }, 1500);
+    }
+    function copyAllOBSUrls() {
+      const urls = Object.values(servicesStatus).map(s => s.overlayUrl).join('\n');
+      window.launcher.copyToClipboard(urls);
+    }
+
+    function openTokenGenerator() {
+      window.launcher.openExternal('https://twitchtokengenerator.com/');
+    }
+
+    function stopAllAndQuit() {
+      window.launcher.stopAll();
+      setTimeout(() => window.close(), 1000);
+    }
+
+    // ── Init ──────────────────────────────────────
+    window.launcher.getStatus().then(status => {
+      servicesStatus = status;
+      updateStatusUI({});
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,53 @@
+{
+  "name": "virtual-twitch-club",
+  "version": "1.0.5",
+  "description": "Virtual Twitch Club - All-in-One Launcher for VirtualClubDancers, TwitchSoundBoard & TwitchDancefloor",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win portable --x64"
+  },
+  "author": "nicetoTECHyou",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.1.0",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.nicetotechyou.virtualtwitchclub",
+    "productName": "VirtualTwitchClub",
+    "asar": false,
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "assets/icon.ico",
+      "signAndEditExecutable": false
+    },
+    "portable": {
+      "artifactName": "VirtualTwitchClub-v${version}-Windows.exe"
+    },
+    "files": [
+      "src/**/*",
+      "renderer/**/*",
+      "preload.js",
+      "assets/**/*",
+      "apps/**/*",
+      "!dist/**/*",
+      "!**/node_modules/.cache/**"
+    ],
+    "extraResources": [
+      {
+        "from": "../apps",
+        "to": "apps",
+        "filter": ["**/*"]
+      }
+    ]
+  }
+}

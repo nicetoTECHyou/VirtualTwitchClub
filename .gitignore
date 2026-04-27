@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.exe
+
+# Config (contains credentials)
+credentials.enc
+*.enc
+
+# Runtime data
+sounds/
+videos/
+data/scenes.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Env
+.env
+.env.*
+
+# Logs
+*.log
+
+# electron-builder
+release/

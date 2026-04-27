@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TwitchSoundBoard – Vote Overlay</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: transparent;
+      font-family: 'Segoe UI', -apple-system, sans-serif;
+    }
+
+    /* Connection Indicator – sichtbar oben links */
+    #ws-status {
+      position: fixed;
+      top: 8px; left: 8px;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font: 11px monospace;
+      z-index: 999;
+      pointer-events: none;
+      background: rgba(200,0,0,0.3);
+      color: #f44;
+    }
+    #ws-status.ok { background: rgba(0,180,80,0.3); color: #0f8; }
+
+    /* ========== READY INDICATOR (nur wenn kein Vote aktiv) ========== */
+    #vote-ready {
+      display: none;
+      position: fixed;
+      bottom: 12px; left: 50%;
+      transform: translateX(-50%);
+      pointer-events: none;
+      z-index: 100;
+    }
+    #vote-ready.show {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 18px;
+      background: rgba(0,0,0,0.55);
+      border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0.08);
+      animation: readyFadeIn 0.6s ease-out;
+    }
+    @keyframes readyFadeIn {
+      0% { opacity: 0; transform: translateX(-50%) translateY(10px); }
+      100% { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+    .ready-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #00b894;
+      box-shadow: 0 0 8px rgba(0,184,148,0.5);
+      animation: readyPulse 2s ease-in-out infinite;
+    }
+    @keyframes readyPulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .ready-text {
+      font-size: 12px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.5);
+      letter-spacing: 0.5px;
+    }
+
+    /* ========== VOTE CONTAINER ========== */
+    #vote-container {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      pointer-events: none;
+      z-index: 200;
+    }
+
+    /* ========== VOTE BAR (Active Voting) ========== */
+    #vote-bar {
+      display: none;
+      background: linear-gradient(to top, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.7) 60%, rgba(0,0,0,0.3) 85%, transparent 100%);
+      padding: 28px 32px 22px;
+      animation: voteSlideIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    @keyframes voteSlideIn {
+      0% { transform: translateY(100%); opacity: 0; }
+      100% { transform: translateY(0); opacity: 1; }
+    }
+    @keyframes voteSlideOut {
+      0% { transform: translateY(0); opacity: 1; }
+      100% { transform: translateY(100%); opacity: 0; }
+    }
+
+    /* Track Title */
+    .vote-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #ffffff;
+      text-align: center;
+      margin-bottom: 16px;
+      text-shadow: 0 1px 6px rgba(0,0,0,0.6);
+      letter-spacing: 0.3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 700px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    /* Bars Container */
+    .vote-track {
+      display: flex;
+      align-items: stretch;
+      gap: 16px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .vote-side {
+      flex: 1;
+      text-align: center;
+      padding: 12px 16px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.08);
+      transition: border-color 0.3s, background 0.3s, box-shadow 0.3s;
+    }
+    .vote-side.hot.leading {
+      border-color: rgba(255,165,2,0.4);
+      background: rgba(255,165,2,0.08);
+      box-shadow: 0 0 20px rgba(255,165,2,0.1);
+    }
+    .vote-side.not.leading {
+      border-color: rgba(255,71,87,0.4);
+      background: rgba(255,71,87,0.08);
+      box-shadow: 0 0 20px rgba(255,71,87,0.1);
+    }
+
+    .vote-label {
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .hot .vote-label { color: #ffa502; }
+    .not .vote-label { color: #ff4757; }
+
+    .vote-bar-inner {
+      height: 10px;
+      border-radius: 5px;
+      background: rgba(255,255,255,0.1);
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
+
+    .vote-fill {
+      height: 100%;
+      border-radius: 5px;
+      transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+      width: 0%;
+      position: relative;
+    }
+    .hot .vote-fill {
+      background: linear-gradient(90deg, #ff6b35, #ffa502, #ffc048);
+      box-shadow: 0 0 12px rgba(255,165,2,0.4);
+    }
+    .not .vote-fill {
+      background: linear-gradient(90deg, #ff4757, #ff6b81, #ff8a9b);
+      box-shadow: 0 0 12px rgba(255,71,87,0.4);
+    }
+
+    /* Pulse animation on fill */
+    .vote-fill::after {
+      content: '';
+      position: absolute;
+      top: 0; right: 0; bottom: 0; left: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+      animation: shimmer 2s infinite;
+    }
+    @keyframes shimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+
+    .vote-count {
+      font-size: 28px;
+      font-weight: 800;
+      line-height: 1;
+      transition: transform 0.2s, color 0.3s;
+    }
+    .vote-count.bump {
+      transform: scale(1.3);
+    }
+    .hot .vote-count { color: #ffa502; text-shadow: 0 0 10px rgba(255,165,2,0.5); }
+    .not .vote-count { color: #ff4757; text-shadow: 0 0 10px rgba(255,71,87,0.5); }
+
+    .vote-threshold {
+      font-size: 11px;
+      color: rgba(255,255,255,0.4);
+      margin-top: 4px;
+    }
+
+    .vote-vs {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 800;
+      color: rgba(255,255,255,0.2);
+      min-width: 40px;
+      letter-spacing: 1px;
+    }
+
+    /* ========== VOTE RESULT ========== */
+    #vote-result {
+      display: none;
+      text-align: center;
+      padding: 24px 20px;
+      animation: voteSlideIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .result-text {
+      font-size: 26px;
+      font-weight: 800;
+      text-shadow: 0 2px 12px rgba(0,0,0,0.6);
+      padding: 16px 36px;
+      border-radius: 16px;
+      display: inline-block;
+      letter-spacing: 0.5px;
+    }
+    .result-hot {
+      color: #ffa502;
+      background: rgba(255,165,2,0.12);
+      border: 2px solid rgba(255,165,2,0.3);
+      box-shadow: 0 0 40px rgba(255,165,2,0.15);
+    }
+    .result-not {
+      color: #ff4757;
+      background: rgba(255,71,87,0.12);
+      border: 2px solid rgba(255,71,87,0.3);
+      box-shadow: 0 0 40px rgba(255,71,87,0.15);
+    }
+
+    /* Result icon pulse */
+    @keyframes resultPulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+    #vote-result.show .result-text {
+      animation: resultPulse 1.5s ease-in-out infinite;
+    }
+
+    /* ========== VOTER LIST ========== */
+    #voter-list {
+      display: none;
+      margin-top: 10px;
+      text-align: center;
+    }
+    .voter-avatars {
+      display: flex;
+      justify-content: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    .voter-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      animation: chipPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .voter-chip.hot { background: rgba(255,165,2,0.2); color: #ffa502; }
+    .voter-chip.not { background: rgba(255,71,87,0.2); color: #ff4757; }
+    @keyframes chipPop {
+      0% { transform: scale(0); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    /* ========== DEBUG BAR ========== */
+    #debug-bar {
+      display: none;
+      position: fixed;
+      top: 8px; right: 8px;
+      background: rgba(0,0,0,0.75);
+      color: #00ff88;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font: 11px/1.5 monospace;
+      z-index: 999;
+      pointer-events: none;
+      max-width: 360px;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="ws-status">&#11044; Connecting...</div>
+  <div id="debug-bar"></div>
+
+  <!-- Ready Indicator (sichtbar wenn verbunden & kein Vote) -->
+  <div id="vote-ready">
+    <div class="ready-dot"></div>
+    <span class="ready-text">Vote Overlay Ready</span>
+  </div>
+
+  <div id="vote-container">
+    <!-- Active Vote Bar -->
+    <div id="vote-bar">
+      <div class="vote-title" id="voteTitle">Votet !Hot oder !Not</div>
+      <div class="vote-track">
+        <div class="vote-side hot" id="voteHotSide">
+          <div class="vote-label">HOT</div>
+          <div class="vote-bar-inner"><div class="vote-fill" id="voteHotFill"></div></div>
+          <div class="vote-count" id="voteHotCount">0</div>
+          <div class="vote-threshold" id="voteHotThreshold">/ 5</div>
+        </div>
+        <div class="vote-vs">VS</div>
+        <div class="vote-side not" id="voteNotSide">
+          <div class="vote-label">NOT</div>
+          <div class="vote-bar-inner"><div class="vote-fill" id="voteNotFill"></div></div>
+          <div class="vote-count" id="voteNotCount">0</div>
+          <div class="vote-threshold" id="voteNotThreshold">/ 5</div>
+        </div>
+      </div>
+      <div id="voter-list">
+        <div class="voter-avatars" id="voterAvatars"></div>
+      </div>
+    </div>
+
+    <!-- Vote Result -->
+    <div id="vote-result">
+      <div class="result-text" id="voteResultText"></div>
+    </div>
+  </div>
+
+  <script>
+    // =============================================
+    // TwitchSoundBoard – Vote Overlay v2
+    // Standalone OBS Browser Source
+    // =============================================
+
+    var debug = new URLSearchParams(location.search).has('debug');
+    var debugBar = document.getElementById('debug-bar');
+    if (debug) { debugBar.style.display = 'block'; }
+
+    var ws, reconnects = 0;
+    var voteBar = document.getElementById('vote-bar');
+    var voteResult = document.getElementById('vote-result');
+    var voteReady = document.getElementById('vote-ready');
+    var voteTimer = null;
+    var lastHotCount = -1, lastNotCount = -1;
+    var isConnected = false;
+
+    function dbg(msg) {
+      var line = '[' + new Date().toLocaleTimeString('de-DE') + '] ' + msg;
+      console.log(line);
+      if (debug) debugBar.textContent = line;
+    }
+
+    function wsUrl() {
+      var p = parseInt(location.port) || 3000;
+      return 'ws://' + location.hostname + ':' + (p + 1);
+    }
+
+    function connect() {
+      var wsStatus = document.getElementById('ws-status');
+      dbg('Verbinde: ' + wsUrl());
+      ws = new WebSocket(wsUrl());
+      ws.onopen = function() {
+        reconnects = 0;
+        isConnected = true;
+        wsStatus.className = 'ok';
+        wsStatus.innerHTML = '&#11044; Connected';
+        dbg('Verbunden!');
+        showReady();
+      };
+      ws.onmessage = function(e) {
+        try { handleMessage(JSON.parse(e.data)); } catch (err) { dbg('Parse-Fehler: ' + err.message); }
+      };
+      ws.onclose = function() {
+        isConnected = false;
+        wsStatus.className = '';
+        wsStatus.innerHTML = '&#11044; Disconnected';
+        hideReady();
+        reconnect();
+      };
+      ws.onerror = function() { ws.close(); };
+    }
+
+    function reconnect() {
+      if (reconnects >= 60) return dbg('Max Reconnects');
+      reconnects++;
+      var ms = Math.min(1000 * Math.pow(1.4, reconnects - 1), 30000);
+      dbg('Reconnect in ' + Math.round(ms / 1000) + 's (#' + reconnects + ')');
+      setTimeout(connect, ms);
+    }
+
+    // =============================================
+    // Ready Indicator
+    // =============================================
+    function showReady() {
+      if (voteBar.style.display === 'block' || voteResult.style.display === 'block') return;
+      voteReady.classList.add('show');
+      dbg('Ready Indicator eingeblendet');
+    }
+    function hideReady() {
+      voteReady.classList.remove('show');
+    }
+
+    // =============================================
+    // Message Handler
+    // =============================================
+    function handleMessage(data) {
+      if (data.type === 'vote_start') handleVoteStart(data);
+      else if (data.type === 'vote_update') handleVoteUpdate(data);
+      else if (data.type === 'vote_result') handleVoteResult(data);
+      else if (data.type === 'vote_reset') handleVoteReset();
+      else if (data.type === 'init') dbg('Init OK');
+    }
+
+    // =============================================
+    // Vote UI
+    // =============================================
+    function handleVoteStart(data) {
+      clearTimeout(voteTimer);
+      lastHotCount = -1;
+      lastNotCount = -1;
+
+      hideReady();
+
+      voteBar.style.display = 'block';
+      voteBar.style.animation = 'none';
+      void voteBar.offsetHeight;
+      voteBar.style.animation = 'voteSlideIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)';
+
+      voteResult.style.display = 'none';
+      voteResult.classList.remove('show');
+
+      document.getElementById('voteTitle').textContent = data.label;
+      document.getElementById('voteHotFill').style.width = '0%';
+      document.getElementById('voteNotFill').style.width = '0%';
+      document.getElementById('voteHotCount').textContent = '0';
+      document.getElementById('voteNotCount').textContent = '0';
+      document.getElementById('voteHotThreshold').textContent = '/ ' + data.threshold;
+      document.getElementById('voteNotThreshold').textContent = '/ ' + data.threshold;
+      document.getElementById('voteHotSide').classList.remove('leading');
+      document.getElementById('voteNotSide').classList.remove('leading');
+      document.getElementById('voterAvatars').innerHTML = '';
+      document.getElementById('voter-list').style.display = 'none';
+
+      dbg('Vote gestartet: ' + data.label);
+    }
+
+    function handleVoteUpdate(data) {
+      var threshold = data.threshold || 5;
+      var hotPct = Math.min((data.hot / threshold) * 100, 100);
+      var notPct = Math.min((data.not / threshold) * 100, 100);
+
+      document.getElementById('voteHotFill').style.width = hotPct + '%';
+      document.getElementById('voteNotFill').style.width = notPct + '%';
+      document.getElementById('voteHotCount').textContent = data.hot;
+      document.getElementById('voteNotCount').textContent = data.not;
+
+      // Bump animation on count change
+      if (data.hot !== lastHotCount) {
+        bumpCount('voteHotCount');
+        lastHotCount = data.hot;
+      }
+      if (data.not !== lastNotCount) {
+        bumpCount('voteNotCount');
+        lastNotCount = data.not;
+      }
+
+      // Leading indicator
+      var hotSide = document.getElementById('voteHotSide');
+      var notSide = document.getElementById('voteNotSide');
+      hotSide.classList.toggle('leading', data.hot > data.not);
+      notSide.classList.toggle('leading', data.not > data.hot);
+    }
+
+    function bumpCount(id) {
+      var el = document.getElementById(id);
+      el.classList.remove('bump');
+      void el.offsetHeight;
+      el.classList.add('bump');
+      setTimeout(function() { el.classList.remove('bump'); }, 200);
+    }
+
+    function handleVoteResult(data) {
+      dbg('Vote Ergebnis: ' + data.result + ' (Hot:' + data.hot + ' Not:' + data.not + ')');
+      voteBar.style.animation = 'voteSlideOut 0.4s ease-in forwards';
+      setTimeout(function() {
+        voteBar.style.display = 'none';
+        voteBar.style.animation = '';
+
+        voteResult.style.display = 'block';
+        voteResult.style.animation = 'none';
+        void voteResult.offsetHeight;
+        voteResult.style.animation = 'voteSlideIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)';
+
+        var el = document.getElementById('voteResultText');
+        if (data.result === 'hot') {
+          el.className = 'result-text result-hot';
+          el.textContent = 'HOT! Der Track bleibt! (' + data.hot + ' Stimmen)';
+        } else {
+          el.className = 'result-text result-not';
+          el.textContent = 'NOT! Der Track fliegt! (' + data.not + ' Stimmen)';
+        }
+
+        setTimeout(function() { voteResult.classList.add('show'); }, 500);
+
+        voteTimer = setTimeout(function() {
+          voteResult.style.animation = 'voteSlideOut 0.4s ease-in forwards';
+          voteResult.classList.remove('show');
+          setTimeout(function() {
+            voteResult.style.display = 'none';
+            showReady();
+          }, 400);
+        }, 5000);
+      }, 400);
+    }
+
+    function handleVoteReset() {
+      dbg('Vote Reset');
+      clearTimeout(voteTimer);
+      voteBar.style.animation = 'voteSlideOut 0.4s ease-in forwards';
+      voteResult.style.animation = 'voteSlideOut 0.4s ease-in forwards';
+      voteResult.classList.remove('show');
+      setTimeout(function() {
+        voteBar.style.display = 'none';
+        voteBar.style.animation = '';
+        voteResult.style.display = 'none';
+        voteResult.style.animation = '';
+        showReady();
+      }, 400);
+    }
+
+    // Start
+    dbg('Vote Overlay v2 geladen');
+    connect();
+  </script>
+</body>
+</html>

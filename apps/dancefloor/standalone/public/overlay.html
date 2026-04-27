@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="1920, height=1080">
+<title>TwitchDancefloor - OBS Overlay</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 1920px; height: 1080px; overflow: hidden; background: transparent; }
+/* Canvas renders at HALF resolution (960x540) for performance */
+/* CSS scales it to 1920x1080 - glow effects look identical at half-res */
+canvas { display: block; width: 1920px; height: 1080px; image-rendering: auto; }
+#status-dot {
+  position: fixed; top: 10px; right: 10px; width: 8px; height: 8px;
+  border-radius: 50%; background: #ff0044; z-index: 100;
+  transition: background 0.3s;
+}
+#status-dot.connected { background: #00ff88; }
+/* CSS Dancer Container - GPU-composited, zero canvas draw calls! */
+#dancers-container {
+  position: fixed; top: 0; left: 0; width: 1920px; height: 1080px;
+  pointer-events: none; z-index: 10;
+  -webkit-perspective: 1000px;
+  perspective: 1000px;
+}
+.dancer-bone {
+  position: absolute; pointer-events: none;
+  will-change: transform; transform: translateZ(0);
+  -webkit-backface-visibility: hidden; backface-visibility: hidden;
+}
+</style>
+</head>
+<body>
+<!-- Internal resolution: 960x540 (half), displayed at 1920x1080 via CSS -->
+<canvas id="overlay" width="960" height="540"></canvas>
+<div id="dancers-container"></div>
+<div id="status-dot"></div>
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/socket-client.js"></script>
+<script src="/js/effects.js"></script>
+<script src="/js/dancers.js"></script>
+<script src="/js/overlay.js"></script>
+</body>
+</html>

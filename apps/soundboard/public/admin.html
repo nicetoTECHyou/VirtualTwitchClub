@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TwitchSoundBoard – Admin</title>
+  <style>
+    :root{--bg:#0e0e10;--sf:#18181b;--sf2:#1f1f23;--bd:#2f2f35;--tx:#efeff1;--dm:#adadb8;--ac:#9147ff;--ac2:#772ce8;--gn:#00b894;--rd:#ff4757;--or:#ffa502;--r:8px}
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Segoe UI',-apple-system,sans-serif;background:var(--bg);color:var(--tx);min-height:100vh}
+    .header{background:var(--sf);border-bottom:1px solid var(--bd);padding:14px 24px;display:flex;align-items:center;justify-content:space-between}
+    .header h1{font-size:18px;font-weight:600}
+    .header .ver{font-size:12px;color:var(--dm);background:var(--sf2);padding:4px 10px;border-radius:12px}
+    .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:var(--rd)}
+    .dot.on{background:var(--gn)}
+    .wrap{max-width:1100px;margin:0 auto;padding:24px}
+    .tabs{display:flex;gap:4px;margin-bottom:24px;border-bottom:1px solid var(--bd)}
+    .tab{padding:10px 20px;cursor:pointer;color:var(--dm);border-bottom:2px solid transparent;font-size:14px;font-weight:500;transition:.15s}
+    .tab:hover{color:var(--tx)}.tab.on{color:var(--ac);border-bottom-color:var(--ac)}
+    .tc{display:none}.tc.on{display:block}
+    .card{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);padding:20px;margin-bottom:16px}
+    .card h3{font-size:15px;font-weight:600;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+    .card .sub{font-size:12px;color:var(--dm);font-weight:400;margin-left:auto}
+
+    .upload-zone{border:2px dashed var(--bd);border-radius:var(--r);padding:40px;text-align:center;cursor:pointer;transition:.2s;color:var(--dm)}
+    .upload-zone:hover,.upload-zone.drag{border-color:var(--ac);background:rgba(145,71,255,.05)}
+    .upload-zone .ico{font-size:36px;margin-bottom:10px}
+    .upload-zone .hint{font-size:12px;margin-top:8px}
+
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-top:14px}
+    .fcard{background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r);padding:12px}
+    .fcard .fn{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px}
+    .fcard .fm{font-size:11px;color:var(--dm)}
+    .fcard .acts{display:flex;gap:6px;margin-top:8px}
+    .fcard .dur-badge{display:inline-block;font-size:10px;padding:2px 8px;border-radius:4px;background:var(--or);color:#000;margin-top:6px;margin-left:4px;font-weight:600}
+
+    .btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border:none;border-radius:var(--r);cursor:pointer;font-size:13px;font-weight:500;transition:.15s}
+    .bp{background:var(--ac);color:#fff}.bp:hover{background:var(--ac2)}
+    .bs{background:var(--sf2);color:var(--tx);border:1px solid var(--bd)}.bs:hover{background:var(--bd)}
+    .bd{background:transparent;color:var(--rd);border:1px solid var(--rd)}.bd:hover{background:var(--rd);color:#fff}
+    .bg{background:var(--gn);color:#fff}.bg:hover{background:#00a383}
+    .br{background:var(--rd);color:#fff}.br:hover{background:#e0392b}
+    .sm{padding:5px 10px;font-size:12px}
+    .bi{padding:6px;min-width:32px;justify-content:center}
+    .lg{padding:12px 28px;font-size:15px;font-weight:600}
+
+    .fr{display:flex;gap:10px;align-items:center;margin-bottom:10px}
+    .fg{flex:1}.fg label{display:block;font-size:12px;color:var(--dm);margin-bottom:4px}
+    input,select{width:100%;padding:8px 12px;background:var(--bg);border:1px solid var(--bd);border-radius:var(--r);color:var(--tx);font-size:13px;outline:none}
+    input:focus,select:focus{border-color:var(--ac)}
+    input.pw{-webkit-text-security:disc;letter-spacing:2px}
+
+    .clist{list-style:none}
+    .citem{display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r);margin-bottom:8px}
+    .citem:hover{background:var(--bd)}
+    .citem .cn{font-weight:600;font-size:14px;color:var(--ac);min-width:120px}
+    .citem .cf{flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .citem .ct{font-size:11px;padding:2px 8px;border-radius:4px;background:var(--sf);color:var(--dm);min-width:50px;text-align:center}
+    .empty{text-align:center;padding:30px;color:var(--dm);font-size:13px}
+
+    .sgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .si label{display:block;font-size:12px;color:var(--dm);margin-bottom:4px}
+    .si input[type=range]{-webkit-appearance:none;height:6px;background:var(--bd);border:none;border-radius:3px}
+    .si input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--ac);cursor:pointer}
+    .si .rv{font-size:12px;color:var(--ac);float:right}
+
+    .obs-box{background:var(--sf2);border:1px solid var(--ac);border-radius:var(--r);padding:16px;margin-top:12px}
+    .obs-box code{display:block;background:var(--bg);padding:10px 14px;border-radius:4px;font-size:13px;margin-top:6px;word-break:break-all;user-select:all}
+
+    .tog{position:relative;width:40px;height:22px;background:var(--bd);border-radius:11px;cursor:pointer;transition:.2s}
+    .tog.on{background:var(--ac)}
+    .tog::after{content:'';position:absolute;top:3px;left:3px;width:16px;height:16px;background:#fff;border-radius:50%;transition:.2s}
+    .tog.on::after{transform:translateX(18px)}
+
+    .twitch-box{background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r);padding:20px;margin-bottom:16px;text-align:center}
+    .twitch-box.connected{border-color:var(--gn)}
+    .twitch-box.connected .twitch-status{color:var(--gn)}
+    .twitch-box.disconnected{border-color:var(--bd)}
+    .twitch-box.disconnected .twitch-status{color:var(--rd)}
+    .twitch-status{font-size:24px;font-weight:700;margin-bottom:4px}
+    .twitch-sub{font-size:12px;color:var(--dm)}
+
+    .cred-grid{display:grid;gap:14px}
+    .cred-row{display:flex;gap:10px;align-items:flex-end}
+    .cred-row .fg{flex:1}
+    .cred-row .toggle-vis{padding:8px 12px;min-width:44px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r);cursor:pointer;color:var(--dm);font-size:14px;text-align:center}
+    .cred-row .toggle-vis:hover{background:var(--bd);color:var(--tx)}
+
+    .toast-wrap{position:fixed;top:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px}
+    .toast{padding:12px 20px;border-radius:var(--r);font-size:13px;color:#fff;animation:si .3s;box-shadow:0 4px 12px rgba(0,0,0,.3)}
+    .toast.ok{background:var(--gn)}.toast.err{background:var(--rd)}.toast.inf{background:var(--ac)}
+    @keyframes si{from{transform:translateX(100px);opacity:0}to{transform:translateX(0);opacity:1}}
+
+    .sg{display:flex;flex-direction:column;gap:8px;font-size:13px}
+    .sr{display:flex;align-items:center;gap:8px}
+    a{color:var(--ac)}
+    a:hover{text-decoration:underline}
+
+    @media(max-width:768px){.sgrid{grid-template-columns:1fr}.grid{grid-template-columns:1fr}.cred-row{flex-direction:column}}
+
+    .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:8000;display:flex;align-items:center;justify-content:center}
+    .modal-bg.hidden{display:none}
+    .modal{background:var(--sf);border:1px solid var(--bd);border-radius:12px;padding:24px;min-width:360px;max-width:480px;width:90%}
+    .modal h3{font-size:16px;font-weight:600;margin-bottom:18px}
+    .modal .fr{margin-bottom:14px}
+    .modal .dur-info{font-size:11px;color:var(--dm);margin-top:4px}
+    .modal .dur-info em{color:var(--ac);font-style:normal}
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>TwitchSoundBoard <span class="dot on" id="sDot"></span></h1>
+  <span class="ver" id="verBadge">v0.0.0</span>
+</div>
+
+<div class="wrap">
+  <div class="tabs">
+    <div class="tab" data-t="sounds">Sounds & Videos</div>
+    <div class="tab" data-t="commands">Chat-Commands</div>
+    <div class="tab on" data-t="twitch">Twitch</div>
+    <div class="tab" data-t="queue">Queue</div>
+    <div class="tab" data-t="settings">Einstellungen</div>
+    <div class="tab" data-t="obs">OBS</div>
+  </div>
+
+  <!-- ====== TWITCH ====== -->
+  <div class="tc on" id="t-twitch">
+
+    <div class="twitch-box disconnected" id="twBox">
+      <div class="twitch-status" id="twLabel">Getrennt</div>
+      <div class="twitch-sub" id="twSub">Trage unten deine Daten ein und starte den Bot</div>
+    </div>
+
+    <div class="card">
+      <h3>Twitch Credentials <span class="sub">Verschluesselt auf deinem Rechner</span></h3>
+      <div class="cred-grid">
+        <div class="cred-row">
+          <div class="fg">
+            <label>Kanalname</label>
+            <input type="text" id="crCh" placeholder="dein_kanalname">
+          </div>
+        </div>
+        <div class="cred-row">
+          <div class="fg">
+            <label>Bot Account Name</label>
+            <input type="text" id="crBot" placeholder="dein_bot_account_name">
+          </div>
+        </div>
+        <div class="cred-row">
+          <div class="fg">
+            <label>Bot OAuth Token <a href="https://twitchtokengenerator.com/" target="_blank">(hier erstellen)</a></label>
+            <input type="password" class="pw" id="crTok" placeholder="oauth:xxxxxxxxxxxx">
+          </div>
+          <div class="toggle-vis" onclick="togglePw('crTok')" title="Sichtbar machen">&#128065;</div>
+        </div>
+
+      </div>
+      <div style="margin-top:18px;display:flex;gap:10px;align-items:center">
+        <button class="btn bg lg" onclick="saveCreds()">Speichern</button>
+        <button class="btn bp lg" id="twStartBtn" onclick="startBot()">Soundbot Starten</button>
+        <button class="btn br lg" id="twStopBtn" onclick="stopBot()" style="display:none">Stoppen</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Anleitung</h3>
+      <div style="font-size:13px;color:var(--dm);line-height:1.8">
+        <strong>1.</strong> Bot-Token erstellen: <a href="https://twitchtokengenerator.com/" target="_blank">twitchtokengenerator.com</a> (mit deinem Twitch-Account einloggen)<br>
+        <strong>2.</strong> Kanalname eintragen<br>
+        <strong>3.</strong> Bot-Token einfuegen<br>
+        <strong>4.</strong> <strong>Speichern</strong> klicken (wird verschluesselt auf deinem PC gespeichert)<br>
+        <strong>5.</strong> <strong>Soundbot Starten</strong> klicken<br>
+        <br>
+        <strong style="color:var(--tx)">Hinweis:</strong> Alle Credentials werden AES-256 verschluesselt in einer lokalen Datei gespeichert. Sie verlassen nie deinen Rechner.
+      </div>
+    </div>
+  </div>
+
+  <!-- ====== SOUNDS ====== -->
+  <div class="tc" id="t-sounds">
+    <div class="card">
+      <h3>YouTube Import <span class="sub">Per Link als Embed hinzufuegen (kein Download!)</span></h3>
+      <div class="fr">
+        <div class="fg">
+          <label>YouTube Link</label>
+          <input type="text" id="importUrl" placeholder="https://youtube.com/watch?v=... oder https://youtu.be/...">
+        </div>
+        <div><button class="btn bp" id="importBtn" onclick="importFromUrl()">Import</button></div>
+      </div>
+      <div id="importStatus" style="display:none;font-size:13px;margin-top:10px;padding:10px 14px;background:var(--sf2);border-radius:var(--r);border:1px solid var(--bd)"></div>
+    </div>
+
+    <div class="card">
+      <h3>Upload</h3>
+      <div class="upload-zone" id="upZone">
+        <div class="ico">&#128264;</div>
+        <p>Sounds & Videos hierher ziehen oder klicken</p>
+        <div class="hint">MP3, WAV, OGG, M4A, MP4, WebM &mdash; max 50 MB</div>
+        <input type="file" id="fIn" multiple accept=".mp3,.wav,.ogg,.m4a,.mp4,.webm" style="display:none">
+      </div>
+    </div>
+    <div class="card">
+      <h3>Sounds <span id="sC" style="font-weight:400;color:var(--dm);font-size:12px"></span></h3>
+      <div class="grid" id="sG"></div>
+      <div class="empty" id="sE">Noch keine Sounds.</div>
+    </div>
+    <div class="card">
+      <h3>Videos <span id="vC" style="font-weight:400;color:var(--dm);font-size:12px"></span></h3>
+      <div class="grid" id="vG"></div>
+      <div class="empty" id="vE">Noch keine Videos.</div>
+    </div>
+    <div class="card">
+      <h3>Embed Links <span id="lC" style="font-weight:400;color:var(--dm);font-size:12px"></span></h3>
+      <div style="display:flex;gap:10px;margin-bottom:14px">
+        <button class="btn bs sm" onclick="exportLinks()">&#128230; Exportieren</button>
+        <button class="btn bp sm" onclick="document.getElementById('importFileInput').click()">&#128229; Importieren</button>
+        <input type="file" id="importFileInput" accept=".json" style="display:none" onchange="importLinks(event)">
+        <span style="font-size:12px;color:var(--dm);align-self:center">Embed Links + Commands sichern / wiederherstellen</span>
+      </div>
+      <div class="grid" id="lG"></div>
+      <div class="empty" id="lE">Noch keine Embed Links.</div>
+    </div>
+  </div>
+
+  <!-- ====== COMMANDS ====== -->
+  <div class="tc" id="t-commands">
+    <div class="card">
+      <h3>Neuer Chat-Command</h3>
+      <div class="fr">
+        <div class="fg" style="max-width:180px"><label>Command</label><input type="text" id="cN" placeholder="!airhorn"></div>
+        <div class="fg"><label>Sound / Video</label><select id="cF"></select></div>
+        <div><button class="btn bp" onclick="addCmd()">Hinzufuegen</button></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Verfuegbare Commands</h3>
+      <ul class="clist" id="cL"></ul>
+      <div class="empty" id="cE">Keine Commands.</div>
+    </div>
+  </div>
+
+  <!-- ====== QUEUE ====== -->
+  <div class="tc" id="t-queue">
+    <div class="card">
+      <h3>Freigegebene Artists <span class="sub">Nur freigegebene Kuenstler werden aus Chat abgespielt</span></h3>
+      <p style="font-size:12px;color:var(--dm);margin-bottom:14px">Sobald mindestens ein Artist eingetragen ist, werden <strong>nur noch diese</strong> aus Chat abgespielt (!ytlink). Ohne Eintraege sind alle erlaubt. Admin-Trigger im Dashboard sind immer freigeschaltet.</p>
+      <div class="fr">
+        <div class="fg">
+          <label>Artist hinzufuegen</label>
+          <input type="text" id="wlArtist" placeholder="z.B. Eminem" onkeydown="if(event.key==='Enter')addWhitelistArtist()">
+        </div>
+        <div><button class="btn bp" onclick="addWhitelistArtist()">Hinzufuegen</button></div>
+      </div>
+      <div id="wlList" style="margin-top:12px;display:flex;flex-wrap:wrap;gap:4px"></div>
+      <div class="empty" id="wlEmpty">Keine Artists freigegeben (alle erlaubt). Fuege Artists hinzu um zu filtern.</div>
+    </div>
+    <div class="card" style="border-color:var(--rd)">
+      <h3 style="color:var(--rd)">Gesperrte Artists / Blacklist <span class="sub">Twitch-Richtlinien: Diese Songs werden NICHT abgespielt</span></h3>
+      <p style="font-size:12px;color:var(--dm);margin-bottom:14px">Songs deren Artist, Titel oder Kombination einen der unten stehenden Begriffe <strong>enthalten</strong> werden automatisch blockiert. Applies zu Chat-Links (!ytlink). Admin-Importe sind nicht betroffen. Die Blacklist hat hoechste Prioritaet und uebersteuert die Whitelist.</p>
+      <div class="fr">
+        <div class="fg">
+          <label>Artist / Begriff hinzufuegen</label>
+          <input type="text" id="blArtist" placeholder="z.B. Drake, RIAA, Sony Music" onkeydown="if(event.key==='Enter')addBlacklistArtist()">
+        </div>
+        <div><button class="btn br" onclick="addBlacklistArtist()">Hinzufuegen</button></div>
+      </div>
+      <div id="blList" style="margin-top:12px;display:flex;flex-wrap:wrap;gap:4px"></div>
+      <div class="empty" id="blEmpty">Keine Eintraege. Fuege Artists oder Begriffe hinzu die auf Twitch nicht gespielt werden duerfen.</div>
+    </div>
+    <div class="card">
+      <h3>Warteschlange <span id="qCount" style="font-weight:400;color:var(--dm);font-size:12px"></span></h3>
+      <p style="font-size:12px;color:var(--dm);margin-bottom:14px">Live-Anzeige der aktuellen Overlay-Queue. Aktualisiert automatisch alle 2 Sekunden.</p>
+      <div style="display:flex;gap:10px;margin-bottom:16px">
+        <button class="btn bs" onclick="queueSkip()">&#9654; Skip</button>
+        <button class="btn bd" onclick="queueClear()">&#128465; Queue leeren</button>
+        <button class="btn br" onclick="queueStop()">&#9632; Alles stoppen</button>
+      </div>
+      <div id="qCurrent" style="display:none">
+        <div style="font-size:12px;color:var(--dm);margin-bottom:8px">JETZT SPIELT:</div>
+        <div class="citem" style="border-color:var(--gn)">
+          <span style="color:var(--gn);font-weight:700;min-width:50px;text-align:center">&#9654;</span>
+          <span class="cn" id="qCurName">-</span>
+          <span class="cf" id="qCurLabel">-</span>
+          <span class="ct" id="qCurType">-</span>
+          <span class="ct" id="qCurUser">-</span>
+        </div>
+      </div>
+      <div id="qEmpty" class="empty">Queue ist leer.</div>
+      <ul class="clist" id="qList"></ul>
+    </div>
+    <div class="card" id="voteCard">
+      <h3>Live Voting <span class="sub" id="voteStatus" style="color:var(--dm)">Inaktiv</span></h3>
+      <div id="voteInactive" class="empty">Keine Abstimmung aktiv.</div>
+      <div id="voteActive" style="display:none">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+          <span style="font-size:15px;font-weight:600;color:var(--tx)" id="voteTrack">-</span>
+          <span style="font-size:11px;padding:3px 10px;border-radius:4px;background:var(--ac);color:#fff;font-weight:600" id="voteBadge">LAEUFT</span>
+        </div>
+        <div style="display:flex;gap:16px;align-items:center;margin-bottom:14px">
+          <div style="flex:1;text-align:center;padding:14px;background:var(--sf2);border-radius:var(--r);border:1px solid var(--bd)">
+            <div style="font-size:12px;font-weight:700;color:var(--or);letter-spacing:1px;margin-bottom:6px">HOT</div>
+            <div style="font-size:28px;font-weight:800;color:var(--or)" id="voteHotNum">0</div>
+            <div style="font-size:11px;color:var(--dm)" id="voteHotTh">/ 5</div>
+          </div>
+          <div style="font-size:16px;font-weight:800;color:var(--dm)">VS</div>
+          <div style="flex:1;text-align:center;padding:14px;background:var(--sf2);border-radius:var(--r);border:1px solid var(--bd)">
+            <div style="font-size:12px;font-weight:700;color:var(--rd);letter-spacing:1px;margin-bottom:6px">NOT</div>
+            <div style="font-size:28px;font-weight:800;color:var(--rd)" id="voteNotNum">0</div>
+            <div style="font-size:11px;color:var(--dm)" id="voteNotTh">/ 5</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          <div id="voteHotVoters" style="font-size:12px;color:var(--dm)"></div>
+          <div id="voteNotVoters" style="font-size:12px;color:var(--dm)"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====== SETTINGS ====== -->
+  <div class="tc" id="t-settings">
+    <div class="card">
+      <h3>Allgemein</h3>
+      <div class="sgrid">
+        <div class="si"><label>Befehls-Praefix</label><input type="text" id="sPfx" value="!"></div>
+        <div class="si"><label>Max. Queue-Laenge</label><input type="number" id="sQ" min="1" max="50" value="10"></div>
+        <div class="si"><label>Sound-Lautstaerke <span class="rv" id="rvS">80%</span></label><input type="range" id="sVS" min="0" max="1" step="0.05" value="0.8" oninput="document.getElementById('rvS').textContent=Math.round(this.value*100)+'%'"></div>
+        <div class="si"><label>Video-Lautstaerke <span class="rv" id="rvV">50%</span></label><input type="range" id="sVV" min="0" max="1" step="0.05" value="0.5" oninput="document.getElementById('rvV').textContent=Math.round(this.value*100)+'%'"></div>
+        <div class="si"><label>Video max. Dauer (ms)</label><input type="number" id="sVD" min="1000" max="30000" step="500" value="5000"></div>
+        <div class="si">
+          <label style="margin-bottom:8px">Sounds uebereinander</label>
+          <div style="display:flex;align-items:center;gap:10px"><div class="tog" id="sOv" onclick="this.classList.toggle('on')"></div><span style="font-size:13px;color:var(--dm)">Gleichzeitiges Abspielen</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Chat Benachrichtigungen <span class="sub">Bot schreibt automatisch in den Chat</span></h3>
+      <div class="sgrid">
+        <div class="si">
+          <label style="margin-bottom:8px">Song-Info bei Wechsel</label>
+          <div style="display:flex;align-items:center;gap:10px"><div class="tog" id="sNP" onclick="this.classList.toggle('on')"></div><span style="font-size:13px;color:var(--dm)">Bot postet Artist + Titel bei jedem Songwechsel</span></div>
+        </div>
+        <div class="si">
+          <label style="margin-bottom:8px">!queue Command</label>
+          <div style="display:flex;align-items:center;gap:10px"><div class="tog" id="sQE" onclick="this.classList.toggle('on')"></div><span style="font-size:13px;color:var(--dm)">Viewer koennen aktuelle Queue abfragen</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Hot or Not Voting <span class="sub">Viewer voten ueber das laufende Lied</span></h3>
+      <div class="sgrid">
+        <div class="si">
+          <label style="margin-bottom:8px">Voting aktivieren</label>
+          <div style="display:flex;align-items:center;gap:10px"><div class="tog" id="sVT" onclick="this.classList.toggle('on')"></div><span style="font-size:13px;color:var(--dm)">!Hot / !Not Voting bei YouTube Tracks</span></div>
+        </div>
+        <div class="si"><label>Voting Threshold (Stimmen)</label><input type="number" id="sVTh" min="1" max="50" value="5" style="max-width:120px"></div>
+      </div>
+      <p style="font-size:12px;color:var(--dm);margin-top:12px">Wenn aktiviert: Bei jedem YouTube Track fordert der Bot zum Voten auf. Erreicht eine Seite das Threshold, wird der Track behalten (!Hot) oder geloescht + geskippt (!Not). Jeder User hat 1 Stimme.</p>
+      <div style="margin-top:20px"><button class="btn bp" onclick="saveSet()">Speichern</button></div>
+    </div>
+  </div>
+
+  <!-- ====== OBS ====== -->
+  <div class="tc" id="t-obs">
+    <div class="card">
+      <h3>OBS Browser-Quelle</h3>
+      <p style="font-size:13px;color:var(--dm);margin-bottom:14px">Oeffne OBS, fuege eine Browserquelle hinzu, URL unten reinkopieren.</p>
+      <div class="obs-box"><strong style="font-size:12px;color:var(--dm)">Overlay URL:</strong><code id="obsU">http://localhost:3000/overlay</code></div>
+      <div class="obs-box" style="margin-top:10px;border-color:var(--or)"><strong style="font-size:12px;color:var(--or)">Vote Overlay URL:</strong><code id="obsV">http://localhost:3000/vote</code></div>
+      <div class="obs-box" style="margin-top:10px;border-color:var(--bd)"><strong style="font-size:12px;color:var(--dm)">Debug:</strong><code id="obsUD">http://localhost:3000/overlay?debug</code></div>
+    </div>
+    <div class="card">
+      <h3>Status</h3>
+      <div id="stGen" class="sg"><span style="color:var(--dm)">Lade...</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toasts"></div>
+<audio id="prev" style="display:none"></audio>
+
+<!-- Edit Modal (Datei) -->
+<div class="modal-bg hidden" id="editModal">
+  <div class="modal">
+    <h3>Datei bearbeiten</h3>
+    <div class="fr">
+      <div class="fg"><label>Dateiname</label><input type="text" id="emName" readonly style="opacity:.6"></div>
+    </div>
+    <div class="fr">
+      <div class="fg">
+        <label>Anzeigename</label>
+        <input type="text" id="emDisp" placeholder="Optional – Name im Admin anzeigen">
+      </div>
+    </div>
+    <div class="fr">
+      <div class="fg">
+        <label>Max. Spieldauer (ms)</label>
+        <input type="number" id="emDur" placeholder="z.B. 3000 = 3 Sekunden" min="0" max="60000" step="100">
+        <div class="dur-info">Leer = Standarddauer. <em>0</em> = gesamte Datei abspielen (fuer Videos). Fuer Sounds: Datei wird nach dieser Zeit abgeschnitten.</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:20px">
+      <button class="btn bp" onclick="saveFileSettings()">Speichern</button>
+      <button class="btn bs" onclick="closeEditModal()">Abbrechen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Modal (Link) -->
+<div class="modal-bg hidden" id="linkEditModal">
+  <div class="modal">
+    <h3>Embed Link bearbeiten</h3>
+    <div class="fr">
+      <div class="fg"><label>Link ID</label><input type="text" id="lmId" readonly style="opacity:.6"></div>
+    </div>
+    <div class="fr">
+      <div class="fg"><label>Anzeigename / Titel</label><input type="text" id="lmDisp" placeholder="Titel des Tracks / Videos"></div>
+    </div>
+    <div class="fr">
+      <div class="fg"><label>Artist / Kuenstler</label><input type="text" id="lmArtist" placeholder="z.B. Eminem"></div>
+    </div>
+    <div class="fr">
+      <div class="fg">
+        <label>Max. Spieldauer (ms)</label>
+        <input type="number" id="lmDur" placeholder="Leer = Standard (Video: 5s, Audio: ganz)" min="0" max="600000" step="100">
+        <div class="dur-info">Leer = Standard. <em>0</em> = ganzes Video. Fuer Audio: komplett abspielen.</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:20px">
+      <button class="btn bp" onclick="saveLinkSettings()">Speichern</button>
+      <button class="btn bs" onclick="closeLinkEditModal()">Abbrechen</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const A='';
+let sounds=[],videos=[],links=[],allFiles=[],config={chat_commands:{},settings:{}};
+
+document.querySelectorAll('.tab').forEach(t=>{
+  t.onclick=()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
+    document.querySelectorAll('.tc').forEach(x=>x.classList.remove('on'));
+    t.classList.add('on');
+    document.getElementById('t-'+t.dataset.t).classList.add('on');
+  };
+});
+
+async function init(){await Promise.all([loadCreds(),loadMedia(),loadCfg(),loadSt()]);}
+
+// ---- Password Toggle ----
+function togglePw(id){
+  const el=document.getElementById(id);
+  el.type=el.type==='password'?'text':'password';
+}
+
+// ---- Credentials ----
+async function loadCreds(){
+  try{
+    const d=await(await fetch(A+'/api/credentials')).json();
+    if(d.masked.twitch_channel) document.getElementById('crCh').value=d.masked.twitch_channel;
+    if(d.masked.twitch_bot_username) document.getElementById('crBot').value=d.masked.twitch_bot_username;
+    if(d.masked.twitch_bot_token) document.getElementById('crTok').value=d.masked.twitch_bot_token;
+    await refreshTwitchStatus();
+  }catch(e){}
+}
+
+async function saveCreds(){
+  try{
+    const body={
+      twitch_channel: document.getElementById('crCh').value.trim(),
+      twitch_bot_username: document.getElementById('crBot').value.trim(),
+      twitch_bot_token: document.getElementById('crTok').value.trim()
+    };
+    if(!body.twitch_channel)return toast('Kanalname fehlt','err');
+    if(!body.twitch_bot_token)return toast('Bot-Token fehlt','err');
+    const r=await fetch(A+'/api/credentials',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json();
+    if(r.ok)toast('Credentials verschluesselt gespeichert','ok');
+    else toast(d.error||'Fehler','err');
+  }catch(e){toast('Fehler','err');}
+}
+
+async function startBot(){
+  try{
+    const r=await fetch(A+'/api/twitch/start',{method:'POST'});
+    const d=await r.json();
+    if(r.ok){toast('Soundbot gestartet!','ok');await refreshTwitchStatus();}
+    else toast(d.error||'Fehler','err');
+  }catch(e){toast('Fehler: '+e.message,'err');}
+}
+
+async function stopBot(){
+  try{
+    const r=await fetch(A+'/api/twitch/stop',{method:'POST'});
+    const d=await r.json();
+    if(r.ok){toast('Soundbot gestoppt','inf');await refreshTwitchStatus();}
+    else toast(d.error||'Fehler','err');
+  }catch(e){toast('Fehler','err');}
+}
+
+async function refreshTwitchStatus(){
+  try{
+    const d=await(await fetch(A+'/api/twitch/status')).json();
+    const box=document.getElementById('twBox');
+    const label=document.getElementById('twLabel');
+    const sub=document.getElementById('twSub');
+    const startBtn=document.getElementById('twStartBtn');
+    const stopBtn=document.getElementById('twStopBtn');
+    if(d.running){
+      box.className='twitch-box connected';
+      label.textContent='Verbunden';
+      sub.textContent='#'+d.channel;
+      startBtn.style.display='none';
+      stopBtn.style.display='inline-flex';
+    }else{
+      box.className='twitch-box disconnected';
+      label.textContent='Getrennt';
+      sub.textContent=d.channel?'Kanal: '+d.channel+' — Bot starten':'Daten eintragen und Bot starten';
+      startBtn.style.display='inline-flex';
+      stopBtn.style.display='none';
+    }
+  }catch(e){}
+}
+
+// ---- Media ----
+async function loadMedia(){
+  try{
+    const[s,v,l]=await Promise.all([fetch(A+'/api/sounds'),fetch(A+'/api/videos'),fetch(A+'/api/links')]);
+    sounds=await s.json();videos=await v.json();links=await l.json();
+    // Links: yt_embed -> Videos
+    allFiles=[
+      ...sounds.map(f=>({...f,type:'sound'})),
+      ...videos.map(f=>({...f,type:'video'})),
+      ...links.filter(l=>l.link_type==='yt_embed').map(l=>({name:l.link_id,type:'link',display_name:l.title,path:'link:'+l.link_id,link_type:l.link_type,video_id:l.video_id,duration_ms:l.duration_ms}))
+    ];
+    renderFiles();updateSelects();
+  }catch(e){toast('Fehler beim Laden','err');}
+}
+
+function renderFiles(){
+  // Sounds: lokal
+  var sCards=sounds.map(f=>fc(f,'sound')).join('');
+  document.getElementById('sG').innerHTML=sCards;
+  document.getElementById('sC').textContent=sounds.length?`(${sounds.length})`:'';
+  document.getElementById('sE').style.display=sounds.length?'none':'block';
+
+  // Videos: lokal + YT Embeds
+  var vCards=videos.map(f=>fc(f,'video')).join('');
+  var ytCards=links.filter(l=>l.link_type==='yt_embed').map(l=>lc(l,'video')).join('');
+  document.getElementById('vG').innerHTML=vCards+ytCards;
+  var vTotal=videos.length+links.filter(l=>l.link_type==='yt_embed').length;
+  document.getElementById('vC').textContent=vTotal?`(${vTotal})`:'';
+  document.getElementById('vE').style.display=vTotal?'none':'block';
+
+  // Embed Links Uebersicht
+  document.getElementById('lG').innerHTML=links.filter(l=>l.link_type==='yt_embed').map(l=>lc(l,'video')).join('');
+  var lTotal=links.filter(l=>l.link_type==='yt_embed').length;
+  document.getElementById('lC').textContent=lTotal?`(${lTotal})`:'';
+  document.getElementById('lE').style.display=lTotal?'none':'block';
+}
+
+// Link Card (Embed Links)
+function lc(l,section){
+  var durBadge=l.duration_ms?'<span class="dur-badge">'+(l.duration_ms>=1000?(l.duration_ms/1000)+'s':l.duration_ms+'ms')+'</span>':'';
+  var cmds=findCmds(l.link_id);
+  var tags=cmds.map(c=>'<span class="tag">'+esc(c)+'</span>').join('');
+  var badge='<span style="display:inline-block;font-size:10px;padding:2px 8px;border-radius:4px;background:#ff0000;color:#fff;margin-top:6px;font-weight:600">YouTube</span>';
+  return '<div class="fcard"><div class="fn" title="'+esc(l.link_id)+'">&#9654; '+esc(l.title)+'</div><div class="fm">Embed'+badge+'</div>'+tags+durBadge+'<div class="acts"><button class="btn bg sm" onclick="testTrigger(\''+l.link_id+'\',\'link\')">&#128268; Trigger</button><button class="btn bp sm bi" onclick="openEditLinkModal(\''+l.link_id+'\')" title="Bearbeiten">&#9998;</button><button class="btn bd sm bi" onclick="delLink(\''+l.link_id+'\')" title="Loeschen">&#10005;</button></div></div>';
+}
+
+function fc(f,type){
+  var sz=(f.size/1024).toFixed(0)+' KB';
+  var disp=f.display_name||null;
+  const dur=f.duration_ms;
+  const cmds=findCmds(f.name);
+  const tags=cmds.map(c=>'<span class="tag">'+esc(c)+'</span>').join('');
+  const durBadge=dur?'<span class="dur-badge">'+(dur>=1000?(dur/1000)+'s':dur+'ms')+'</span>':'';
+  const label=disp?esc(disp):esc(f.name.replace(/^\d+_/, ''));
+  const fullLabel=disp?esc(disp)+' <span style="color:var(--dm);font-size:11px">'+esc(f.name)+'</span>':esc(f.name);
+  return '<div class="fcard"><div class="fn" title="'+esc(f.name)+'">'+fullLabel+'</div><div class="fm">'+sz+'</div>'+tags+durBadge+'<div class="acts"><button class="btn bs sm" onclick="preview(\''+f.path+'\',\''+type+'\')">&#9654; Test</button><button class="btn bg sm" onclick="testTrigger(\''+f.name+'\',\''+type+'\')">&#128268; Trigger</button><button class="btn bp sm bi" onclick="openEditModal(\''+f.name+'\',\''+type+'\')" title="Bearbeiten">&#9998;</button><button class="btn bd sm bi" onclick="delFile(\''+type+'\',\''+f.name+'\')" title="Loeschen">&#10005;</button></div></div>';
+}
+
+let editFile=null;
+function openEditModal(name,type){
+  editFile={name,type};
+  document.getElementById('emName').value=name;
+  const fs_cfg=(config.file_settings||{})[name]||{};
+  document.getElementById('emDisp').value=fs_cfg.display_name||'';
+  document.getElementById('emDur').value=fs_cfg.duration_ms||'';
+  document.getElementById('editModal').classList.remove('hidden');
+}
+function closeEditModal(){document.getElementById('editModal').classList.add('hidden');editFile=null;}
+
+async function saveFileSettings(){
+  if(!editFile)return;
+  try{
+    const r=await fetch(A+'/api/media/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:editFile.name,duration_ms:document.getElementById('emDur').value||null,display_name:document.getElementById('emDisp').value.trim()||null})});
+    const d=await r.json();
+    if(r.ok){toast('Gespeichert','ok');closeEditModal();await loadMedia();await loadCfg();}
+    else toast(d.error||'Fehler','err');
+  }catch(e){toast('Fehler','err');}
+}
+
+document.getElementById('editModal').addEventListener('click',function(e){if(e.target===this)closeEditModal();});
+document.getElementById('linkEditModal').addEventListener('click',function(e){if(e.target===this)closeLinkEditModal();});
+
+function findCmds(fn){const r=[];for(const[k,v]of Object.entries(config.chat_commands||{}))if(v.file===fn)r.push(k);return r;}
+
+// Link Edit Modal
+var editLinkId=null;
+function openEditLinkModal(linkId){
+  editLinkId=linkId;
+  var link=(config.links||{})[linkId];
+  if(!link)return;
+  document.getElementById('lmId').value=linkId;
+  document.getElementById('lmDisp').value=link.title||'';
+  document.getElementById('lmArtist').value=link.artist||'';
+  document.getElementById('lmDur').value=(link.duration_ms!=null)?link.duration_ms:'';
+  document.getElementById('linkEditModal').classList.remove('hidden');
+}
+function closeLinkEditModal(){document.getElementById('linkEditModal').classList.add('hidden');editLinkId=null;}
+async function saveLinkSettings(){
+  if(!editLinkId)return;
+  try{
+    var r=await fetch(A+'/api/links/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({link_id:editLinkId,duration_ms:document.getElementById('lmDur').value||null,display_name:document.getElementById('lmDisp').value.trim()||null,artist:document.getElementById('lmArtist').value.trim()||null})});
+    var d=await r.json();
+    if(r.ok){toast('Gespeichert','ok');closeLinkEditModal();await loadMedia();await loadCfg();}
+    else toast(d.error||'Fehler','err');
+  }catch(e){toast('Fehler','err');}
+}
+
+const upZone=document.getElementById('upZone'),fIn=document.getElementById('fIn');
+upZone.onclick=()=>fIn.click();
+upZone.ondragover=e=>{e.preventDefault();upZone.classList.add('drag');};
+upZone.ondragleave=()=>upZone.classList.remove('drag');
+upZone.ondrop=e=>{e.preventDefault();upZone.classList.remove('drag');uploadF(e.dataTransfer.files);};
+fIn.onchange=()=>{if(fIn.files.length)uploadF(fIn.files);fIn.value='';};
+
+async function uploadF(files){
+  const fd=new FormData();for(const f of files)fd.append('files',f);
+  try{const r=await fetch(A+'/api/upload',{method:'POST',body:fd});const d=await r.json();if(r.ok){toast(`${d.uploaded.length} hochgeladen`,'ok');await loadMedia();}else toast(d.error,'err');}catch(e){toast('Upload-Fehler','err');}
+}
+
+async function delFile(t,n){if(!confirm('Loeschen?'))return;await fetch(`${A}/api/media/${t}/${encodeURIComponent(n)}`,{method:'DELETE'});toast('Geloescht','ok');await loadMedia();await loadCfg();}
+
+async function delLink(linkId){if(!confirm('Embed Link loeschen?'))return;await fetch(`${A}/api/links/${encodeURIComponent(linkId)}`,{method:'DELETE'});toast('Link geloescht','ok');await loadMedia();await loadCfg();}
+
+function preview(p,t){const a=document.getElementById('prev');if(t==='sound'){a.src=p;a.play().catch(()=>{});}}
+
+async function testTrigger(file,type){
+  try{await fetch(A+'/api/test-trigger',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({file,type})});toast(`Trigger: ${file}`,'ok');}catch(e){toast('Fehler','err');}
+}
+
+async function importFromUrl(){
+  var url=document.getElementById('importUrl').value.trim();
+  if(!url)return toast('Link eingeben!','err');
+  var btn=document.getElementById('importBtn');
+  var st=document.getElementById('importStatus');
+  btn.disabled=true;btn.textContent='Importiere...';
+  st.style.display='block';
+  st.innerHTML='<span style=\"color:var(--dm)\">&#8987; Importiere Embed Link...</span>';
+  try{
+    var r=await fetch(A+'/api/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:url})});
+    var d=await r.json();
+    if(r.ok){
+      var imp=d.import;
+      var lbl='YouTube Video Embed';
+      st.innerHTML='<span style=\"color:var(--gn)\">&#10003; '+esc(imp.title)+'</span> als '+lbl+' hinzugefuegt';
+      toast('"'+imp.title+'" importiert!','ok');
+      document.getElementById('importUrl').value='';
+      await loadMedia();await loadCfg();
+    }else{
+      st.innerHTML='<span style="color:var(--rd)">Fehler: '+esc(d.error)+'</span>';
+      toast(d.error,'err');
+    }
+  }catch(e){
+    st.innerHTML='<span style="color:var(--rd)">Verbindungsfehler</span>';
+    toast('Fehler','err');
+  }finally{
+    btn.disabled=false;btn.textContent='Import';
+  }
+}
+
+// ---- Config ----
+async function loadCfg(){try{config=await(await fetch(A+'/api/config')).json();renderCmds();applySet();}catch(e){}}
+
+function renderCmds(){
+  const cmds=config.chat_commands||{},keys=Object.keys(cmds);
+  document.getElementById('cE').style.display=keys.length?'none':'block';
+  document.getElementById('cL').innerHTML=keys.map(function(k){
+    var cmd=cmds[k];
+    var t=cmd.type==='video'?'Video':cmd.type==='link'?'Link':'Sound';
+    var desc=esc(cmd.file);
+    if(cmd.type==='link'){
+      var link=(config.links||{})[cmd.file];
+      if(link){var parts=[];if(link.artist)parts.push(esc(link.artist));if(link.title)parts.push(esc(link.title));desc=parts.length?parts.join(' - '):esc(cmd.file);}
+    }else if(cmd.type==='video'){
+      var fs_cfg=(config.file_settings||{})[cmd.file]||{};
+      desc=fs_cfg.display_name?esc(fs_cfg.display_name):esc(cmd.file);
+    }
+    return '<li class="citem"><span class="cn">'+esc(k)+'</span><span class="cf">'+desc+'</span><span class="ct">'+t+'</span><button class="btn bd sm bi" onclick="delCmd(\''+esc(k)+'\')" title="Loeschen">&#10005;</button></li>';
+  }).join('');
+  renderWhitelist();
+  renderBlacklist();
+}
+
+async function addCmd(){
+  const name=document.getElementById('cN').value.trim(),fileVal=document.getElementById('cF').value;
+  if(!name||!fileVal)return toast('Command und Datei!','err');
+  let cmdFile,cmdType;
+  if(fileVal.startsWith('link:')){
+    cmdFile=fileVal.substring(5);
+    cmdType='link';
+  }else{
+    const fi=allFiles.find(f=>f.path===fileVal);
+    cmdFile=fi?fi.name:fileVal;
+    cmdType=fi?fi.type:'sound';
+  }
+  try{const r=await fetch(A+'/api/config/commands',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:name,file:cmdFile,type:cmdType})});if(r.ok){toast(`"${name}" hinzugefuegt`,'ok');document.getElementById('cN').value='';await loadCfg();}else{const d=await r.json();toast(d.error,'err');}}catch(e){toast('Fehler','err');}
+}
+
+async function delCmd(c){await fetch(`${A}/api/config/commands/${encodeURIComponent(c)}`,{method:'DELETE'});toast('Geloescht','ok');await loadCfg();}
+
+function applySet(){
+  const s=config.settings||{};
+  document.getElementById('sPfx').value=s.command_prefix||'!';
+  document.getElementById('sQ').value=s.max_queue_size||10;
+  document.getElementById('sVS').value=s.sound_volume||0.8;
+  document.getElementById('rvS').textContent=Math.round((s.sound_volume||0.8)*100)+'%';
+  document.getElementById('sVV').value=s.video_volume||0.5;
+  document.getElementById('rvV').textContent=Math.round((s.video_volume||0.5)*100)+'%';
+  document.getElementById('sVD').value=s.video_duration_override_ms||5000;
+  const ov=document.getElementById('sOv');s.allow_overlap?ov.classList.add('on'):ov.classList.remove('on');
+  const np=document.getElementById('sNP');s.chat_now_playing?np.classList.add('on'):np.classList.remove('on');
+  const qe=document.getElementById('sQE');s.chat_queue_enabled?qe.classList.add('on'):qe.classList.remove('on');
+  const vt=document.getElementById('sVT');s.voting_enabled?vt.classList.add('on'):vt.classList.remove('on');
+  document.getElementById('sVTh').value=s.voting_threshold||5;
+}
+
+async function saveSet(){
+  try{await fetch(A+'/api/config/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({command_prefix:document.getElementById('sPfx').value||'!',max_queue_size:parseInt(document.getElementById('sQ').value)||10,sound_volume:parseFloat(document.getElementById('sVS').value)||0.8,video_volume:parseFloat(document.getElementById('sVV').value)||0.5,video_duration_override_ms:parseInt(document.getElementById('sVD').value)||5000,allow_overlap:document.getElementById('sOv').classList.contains('on'),chat_now_playing:document.getElementById('sNP').classList.contains('on'),chat_queue_enabled:document.getElementById('sQE').classList.contains('on'),voting_enabled:document.getElementById('sVT').classList.contains('on'),voting_threshold:parseInt(document.getElementById('sVTh').value)||5})});toast('Gespeichert','ok');await loadCfg();}catch(e){toast('Fehler','err');}
+}
+
+function updateSelects(){
+  const opts='<option value="">-- Datei waehlen --</option>'+allFiles.map(f=>'<option value="'+f.path+'">'+esc(f.display_name||f.name.replace(/^\d+_/,''))+' ('+f.type+')</option>').join('');
+  document.getElementById('cF').innerHTML=opts;
+}
+
+async function loadSt(){
+  try{
+    const d=await(await fetch(A+'/api/health')).json();
+    document.getElementById('verBadge').textContent='v'+d.version;
+    document.getElementById('obsU').textContent=`http://localhost:${location.port}/overlay`;
+    document.getElementById('obsUD').textContent=`http://localhost:${location.port}/overlay?debug`;
+    document.getElementById('obsV').textContent=`http://localhost:${location.port}/vote`;
+    document.getElementById('stGen').innerHTML=`
+      <div class="sr"><span class="dot ${d.twitch.running?'on':''}"></span> Twitch Chat: ${d.twitch.running?'Verbunden (#'+d.twitch.channel+')':'Getrennt'}</div>
+      <div class="sr"><span class="dot on"></span> Server: Online (${Math.round(d.uptime/60)}min)</div>
+      <div class="sr" style="color:var(--dm);margin-top:4px">${d.sounds} Sounds, ${d.videos} Videos, ${d.links} Links, ${d.overlayClients} Overlay</div>`;
+    await refreshTwitchStatus();
+  }catch(e){}
+}
+
+function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+function toast(m,t='inf'){const c=document.getElementById('toasts'),e=document.createElement('div');e.className='toast '+t;e.textContent=m;c.appendChild(e);setTimeout(()=>e.remove(),3500);}
+
+init();setInterval(()=>{loadSt();refreshTwitchStatus();},10000);
+setInterval(loadQueue,2000);
+setInterval(loadVote,1500);
+
+// ---- Vote Status (Live) ----
+async function loadVote(){
+  try{
+    var d=await(await fetch(A+'/api/vote')).json();
+    var inactive=document.getElementById('voteInactive');
+    var active=document.getElementById('voteActive');
+    var status=document.getElementById('voteStatus');
+    if(!d.active){
+      inactive.style.display='block';
+      active.style.display='none';
+      status.textContent='Inaktiv';
+      status.style.color='var(--dm)';
+      return;
+    }
+    inactive.style.display='none';
+    active.style.display='block';
+    if(d.resolved){
+      status.textContent='Entschieden';
+      status.style.color='var(--or)';
+    }else{
+      status.textContent='Aktiv';
+      status.style.color='var(--gn)';
+    }
+    document.getElementById('voteTrack').textContent=d.label||'-';
+    document.getElementById('voteHotNum').textContent=d.hot;
+    document.getElementById('voteNotNum').textContent=d.not;
+    document.getElementById('voteHotTh').textContent='/ '+d.threshold;
+    document.getElementById('voteNotTh').textContent='/ '+d.threshold;
+    var hv=document.getElementById('voteHotVoters');
+    var nv=document.getElementById('voteNotVoters');
+    hv.innerHTML=d.hotVoters&&d.hotVoters.length?'Hot: '+d.hotVoters.map(function(v){return esc(v);}).join(', '):'';
+    nv.innerHTML=d.notVoters&&d.notVoters.length?'Not: '+d.notVoters.map(function(v){return esc(v);}).join(', '):'';
+  }catch(e){}
+}
+
+// ---- Queue Management ----
+async function loadQueue(){
+  try{
+    const d=await(await fetch(A+'/api/queue')).json();
+    const qCur=document.getElementById('qCurrent');
+    const qList=document.getElementById('qList');
+    const qEmpty=document.getElementById('qEmpty');
+    const qCount=document.getElementById('qCount');
+    var total=(d.queue||[]).length+(d.isPlaying?1:0);
+    qCount.textContent=total?'('+total+')':'';
+
+    // Aktuell spielendes Item
+    if(d.isPlaying&&d.current){
+      qCur.style.display='block';
+      var c=d.current;
+      document.getElementById('qCurName').textContent='#1';
+      document.getElementById('qCurLabel').textContent=c.label||c.file||'-';
+      document.getElementById('qCurType').textContent=c.mediaType==='link'?'YouTube':c.mediaType==='video'?'Video':'Sound';
+      document.getElementById('qCurUser').textContent=c.user||'-';
+    }else{
+      qCur.style.display='none';
+    }
+
+    // Queue-Liste
+    var items=d.queue||[];
+    if(items.length===0){
+      qList.innerHTML='';
+      qEmpty.style.display=d.isPlaying?'none':'block';
+    }else{
+      qEmpty.style.display='none';
+      qList.innerHTML=items.map(function(item,i){
+        var type=item.mediaType==='link'?'YouTube':item.mediaType==='video'?'Video':'Sound';
+        return '<li class=\"citem\"><span class=\"cn\" style=\"color:var(--or);min-width:50px;text-align:center\">#'+(i+2)+'</span><span class=\"cf\">'+esc(item.label||item.file||'-')+'</span><span class=\"ct\">'+type+'</span><span class=\"ct\">'+esc(item.user||'-')+'</span></li>';
+      }).join('');
+    }
+  }catch(e){}
+}
+
+async function queueSkip(){try{await fetch(A+'/api/queue/skip',{method:'POST'});toast('Skip','ok');}catch(e){toast('Fehler','err');}}
+async function queueClear(){try{await fetch(A+'/api/queue/clear',{method:'POST'});toast('Queue geleert','inf');}catch(e){toast('Fehler','err');}}
+async function queueStop(){try{await fetch(A+'/api/queue/stop',{method:'POST'});toast('Alles gestoppt','inf');}catch(e){toast('Fehler','err');}}
+
+// ---- Artist Whitelist ----
+function renderWhitelist(){
+  var wl=(config.settings||{}).whitelist_artists||[];
+  var list=document.getElementById('wlList');
+  var empty=document.getElementById('wlEmpty');
+  if(!list||!empty)return;
+  if(wl.length===0){list.innerHTML='';empty.style.display='block';}
+  else{
+    empty.style.display='none';
+    list.innerHTML=wl.map(function(a){
+      var safe=esc(a).replace(/'/g,"’");
+      return '<span style="display:inline-flex;align-items:center;gap:6px;background:var(--sf2);border:1px solid var(--gn);border-radius:var(--r);padding:6px 12px;font-size:13px;color:var(--gn)">'+esc(a)+'<button class="btn bd sm bi" onclick="removeWhitelistArtist(\''+safe+'\')" title="Entfernen">&#10005;</button></span>';
+    }).join('');
+  }
+}
+
+async function addWhitelistArtist(){
+  var name=document.getElementById('wlArtist').value.trim();
+  if(!name)return toast('Artist eingeben!','err');
+  var wl=(config.settings||{}).whitelist_artists||[];
+  if(wl.some(function(a){return a.toLowerCase()===name.toLowerCase();}))return toast('Bereits freigegeben','inf');
+  wl.push(name);
+  try{await fetch(A+'/api/config/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({whitelist_artists:wl})});document.getElementById('wlArtist').value='';toast(name+' freigegeben','ok');await loadCfg();}catch(e){toast('Fehler','err');}
+}
+
+async function removeWhitelistArtist(name){
+  var wl=(config.settings||{}).whitelist_artists||[];
+  wl=wl.filter(function(a){return a!==name;});
+  try{await fetch(A+'/api/config/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({whitelist_artists:wl})});toast(name+' entfernt','inf');await loadCfg();}catch(e){toast('Fehler','err');}
+}
+
+// ---- Blacklist ----
+function renderBlacklist(){
+  var bl=(config.settings||{}).blacklist_artists||[];
+  var list=document.getElementById('blList');
+  var empty=document.getElementById('blEmpty');
+  if(bl.length===0){list.innerHTML='';empty.style.display='block';return;}
+  empty.style.display='none';
+  list.innerHTML=bl.map(function(a){
+    var safe=esc(a).replace(/'/g,'\u2019');
+    return '<span style="display:inline-flex;align-items:center;gap:6px;background:var(--sf2);border:1px solid var(--rd);border-radius:var(--r);padding:6px 12px;font-size:13px;color:var(--rd)">'+esc(a)+'<button class="btn bd sm bi" onclick="removeBlacklistArtist(\''+safe+'\')" title="Entfernen">&#10005;</button></span>';
+  }).join('');
+}
+
+async function addBlacklistArtist(){
+  var name=document.getElementById('blArtist').value.trim();
+  if(!name)return toast('Begriff eingeben!','err');
+  var bl=(config.settings||{}).blacklist_artists||[];
+  if(bl.some(function(a){return a.toLowerCase()===name.toLowerCase();}))return toast('Bereits auf der Blacklist','inf');
+  bl.push(name);
+  try{await fetch(A+'/api/config/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({blacklist_artists:bl})});document.getElementById('blArtist').value='';toast(name+' auf Blacklist gesetzt','ok');await loadCfg();}catch(e){toast('Fehler','err');}
+}
+
+async function removeBlacklistArtist(name){
+  var bl=(config.settings||{}).blacklist_artists||[];
+  bl=bl.filter(function(a){return a!==name;});
+  try{await fetch(A+'/api/config/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({blacklist_artists:bl})});toast(name+' von Blacklist entfernt','inf');await loadCfg();}catch(e){toast('Fehler','err');}
+}
+
+// ---- Export / Import Links ----
+async function exportLinks(){
+  try{
+    var r=await fetch(A+'/api/links/export');
+    var d=await r.json();
+    var blob=new Blob([JSON.stringify(d,null,2)],{type:'application/json'});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');
+    a.href=url;a.download='twitchsoundboard-links-export.json';a.click();
+    URL.revokeObjectURL(url);
+    toast('Export heruntergeladen','ok');
+  }catch(e){toast('Export Fehler','err');}
+}
+
+async function importLinks(event){
+  var file=event.target.files[0];
+  if(!file)return;
+  if(!confirm('Embed Links importieren? Bestehende Links mit gleicher ID werden ueberschrieben.'))return;
+  try{
+    var text=await file.text();
+    var data=JSON.parse(text);
+    var r=await fetch(A+'/api/links/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    var d=await r.json();
+    if(r.ok){toast(d.imported+' Links importiert!','ok');await loadMedia();await loadCfg();}
+    else toast(d.error||'Fehler','err');
+  }catch(e){toast('Ungueltige Datei','err');}
+  event.target.value='';
+}
+</script>
+</body>
+</html>

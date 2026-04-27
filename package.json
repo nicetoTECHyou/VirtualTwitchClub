@@ -1,0 +1,14 @@
+{
+  "name": "virtual-twitch-club-monorepo",
+  "version": "1.0.0",
+  "description": "Virtual Twitch Club - All-in-One Twitch Stream Tool Suite",
+  "private": true,
+  "scripts": {
+    "install:all": "cd apps/dancers && npm install && cd ../../apps/soundboard && npm install && cd ../../apps/dancefloor/standalone && npm install && cd ../../../launcher && npm install",
+    "start:launcher": "cd launcher && npm start",
+    "build": "cd launcher && npm run build",
+    "build:installer": "cd launcher && npm run build:installer"
+  },
+  "author": "nicetoTECHyou",
+  "license": "MIT"
+}
