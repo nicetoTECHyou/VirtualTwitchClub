@@ -21,7 +21,7 @@ const CONFIG_DIR = path.join(os.homedir(), '.virtualtwitchclub');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 
 console.log('='.repeat(60));
-console.log('[Launcher] Virtual Twitch Club v1.0.5');
+console.log('[Launcher] Virtual Twitch Club v1.0.6');
 console.log('[Launcher] isDev:', isDev);
 console.log('[Launcher] LAUNCHER_DIR:', LAUNCHER_DIR);
 console.log('[Launcher] APPS_DIR:', APPS_DIR);

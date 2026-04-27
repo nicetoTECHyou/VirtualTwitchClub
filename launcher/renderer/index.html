@@ -86,9 +86,17 @@
       width: 100%;
       height: 100%;
       border: none;
-      display: none;
+      position: absolute;
+      top: 0; left: 0;
+      visibility: hidden;
+      z-index: 0;
+      /* visibility:hidden keeps the iframe ALIVE (AudioContext, timers, JS keep running)
+         unlike display:none which freezes everything */
     }
-    .tab-content iframe.active { display: block; }
+    .tab-content iframe.active {
+      visibility: visible;
+      z-index: 1;
+    }
 
     /* ── Status Bar (shows server status & errors) ── */
     .status-bar {
@@ -451,6 +459,8 @@
     };
 
     // ── Tab Management (iframe-based) ─────────────
+    const iframeLoaded = { dancers: false, soundboard: false, dancefloor: false };
+
     function switchTab(tabKey) {
       activeTab = tabKey;
 
@@ -458,27 +468,15 @@
       document.querySelectorAll('.tab[data-tab]').forEach(t => t.classList.remove('active'));
       document.querySelector(`.tab[data-tab="${tabKey}"]`)?.classList.add('active');
 
-      // Show the right iframe
+      // Show the right iframe (visibility toggle, NOT display - keeps audio alive)
       document.querySelectorAll('.tab-content iframe').forEach(f => f.classList.remove('active'));
       const frame = document.getElementById(`frame-${tabKey}`);
       if (frame) {
         frame.classList.add('active');
-        // Load URL if needed
-        const svc = servicesStatus[tabKey];
-        const url = tabUrls[tabKey];
-        if (svc && svc.status === 'running') {
-          // Reload if URL changed or empty
-          try {
-            const currentUrl = frame.contentWindow?.location?.href;
-            if (!currentUrl || !currentUrl.startsWith(url)) {
-              frame.src = url;
-            }
-          } catch(e) {
-            frame.src = url;
-          }
-        } else {
-          // Server not running - load URL anyway (will show connection refused in iframe)
-          frame.src = url;
+        // Only load URL once - NEVER reload on tab switch (would kill audio connections)
+        if (!iframeLoaded[tabKey] && !frame.src) {
+          frame.src = tabUrls[tabKey];
+          iframeLoaded[tabKey] = true;
         }
       }
     }
@@ -509,10 +507,15 @@
           bar.lastChild.textContent = ` ${info.name} :${info.port}`;
         }
 
-        // Auto-reload iframe when service becomes running
-        if (info.status === 'running' && prev[key]?.status !== 'running' && activeTab === key) {
-          const frame = document.getElementById(`frame-${key}`);
-          if (frame) frame.src = tabUrls[key];
+        // Auto-load iframe when service becomes running (only once, never reload)
+        if (info.status === 'running' && prev[key]?.status !== 'running') {
+          if (!iframeLoaded[key]) {
+            const frame = document.getElementById(`frame-${key}`);
+            if (frame) {
+              frame.src = tabUrls[key];
+              iframeLoaded[key] = true;
+            }
+          }
         }
       }
 
