@@ -261,6 +261,53 @@
     .modal-close:hover { color: #fff; }
 
     @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+    /* ── Backup Modal ────────────────────────────── */
+    .backup-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0;
+    }
+    .backup-card {
+      background: rgba(255,255,255,0.03); border: 1px solid #333; border-radius: 10px;
+      padding: 14px; font-size: 12px;
+    }
+    .backup-card h4 {
+      font-size: 13px; margin-bottom: 8px; color: #e94560; display: flex; align-items: center; gap: 6px;
+    }
+    .backup-card ul {
+      list-style: none; padding: 0; margin: 0;
+    }
+    .backup-card ul li {
+      padding: 3px 0; color: #aaa; display: flex; justify-content: space-between;
+    }
+    .backup-card ul li span.val {
+      color: #00ff88; font-weight: 600; font-family: 'Consolas', monospace;
+    }
+    .backup-card ul li span.val.empty { color: #555; }
+    .backup-actions {
+      display: flex; gap: 12px; margin-top: 20px;
+    }
+    .backup-actions .btn {
+      flex: 1; padding: 12px 16px; font-size: 13px;
+    }
+    .btn-export {
+      background: linear-gradient(135deg, #00c853, #00ff88); color: #000; border: none; border-radius: 8px;
+      font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.2s;
+    }
+    .btn-export:hover { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(0,255,136,0.4); }
+    .btn-export:disabled { background: #333; color: #666; cursor: not-allowed; transform: none; box-shadow: none; }
+    .btn-import {
+      background: transparent; color: #e94560; border: 2px solid #e94560; border-radius: 8px;
+      font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.2s;
+    }
+    .btn-import:hover { background: rgba(233,69,96,0.1); }
+    .btn-import:disabled { border-color: #333; color: #666; cursor: not-allowed; }
+    .backup-status {
+      margin-top: 14px; padding: 10px 14px; border-radius: 8px; font-size: 12px; display: none;
+    }
+    .backup-status.ok { display: block; background: rgba(0,255,136,0.1); border: 1px solid rgba(0,255,136,0.3); color: #00ff88; }
+    .backup-status.err { display: block; background: rgba(255,68,68,0.1); border: 1px solid rgba(255,68,68,0.3); color: #ff6666; }
+    .backup-status.warn { display: block; background: rgba(255,170,0,0.1); border: 1px solid rgba(255,170,0,0.3); color: #ffaa00; }
+    .backup-section-icon { font-size: 16px; }
   </style>
 </head>
 <body>
@@ -284,6 +331,7 @@
 
     <div class="tab-actions">
       <button class="tab-btn" onclick="openOBSGuide()" title="OBS Setup Guide">OBS Guide</button>
+      <button class="tab-btn" onclick="openBackupModal()" title="Backup & Restore" style="border-color:#00ff88;color:#00ff88;">Backup</button>
       <button class="tab-btn" onclick="copyAllOBSUrls()" title="OBS URLs kopieren">URLs</button>
       <button class="tab-btn danger" onclick="stopAllAndQuit()" title="Beenden">Beenden</button>
     </div>
@@ -388,6 +436,35 @@
         <button class="btn btn-primary" onclick="finishSetup()">
           Virtual Twitch Club starten
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Backup & Restore Modal -->
+  <div class="modal-overlay" id="backup-modal">
+    <div class="modal" style="width:640px;">
+      <button class="modal-close" onclick="closeBackupModal()">&times;</button>
+      <h2 style="margin-bottom:6px;">Backup & Restore</h2>
+      <p style="color:#888;font-size:12px;margin-bottom:18px;">Komplettes Backup aller Einstellungen aus allen 3 Apps + Launcher. Inklusive Blacklist, Whitelist, Chat-Commands, Scenes und Twitch-Credentials.</p>
+
+      <div class="backup-grid" id="backup-summary-grid">
+        <!-- Filled by JS -->
+      </div>
+
+      <div class="backup-actions">
+        <button class="btn-export" id="btn-do-export" onclick="doExportBackup()">
+          &#128228; Backup Exportieren
+        </button>
+        <button class="btn-import" id="btn-do-import" onclick="document.getElementById('backup-file-input').click()">
+          &#128229; Backup Importieren
+        </button>
+        <input type="file" id="backup-file-input" accept=".json" style="display:none" onchange="doImportBackup(event)">
+      </div>
+
+      <div class="backup-status" id="backup-status"></div>
+
+      <div style="margin-top:18px;padding:10px 14px;background:rgba(255,170,0,0.08);border:1px solid rgba(255,170,0,0.2);border-radius:8px;font-size:11px;color:#ffaa00;line-height:1.6;">
+        <strong>Hinweis:</strong> Medien-Dateien (Sounds, Videos) werden <strong>nicht</strong> exportiert - nur die Einstellungen. Nach einem Import muss die App neu gestartet werden damit alle Aenderungen wirksam werden.
       </div>
     </div>
   </div>
@@ -707,6 +784,104 @@
 
     function openTokenGenerator() {
       window.launcher.openExternal('https://twitchtokengenerator.com/');
+    }
+
+    // ── Backup & Restore ───────────────────────────
+    function openBackupModal() {
+      document.getElementById('backup-modal').classList.add('visible');
+      document.getElementById('backup-status').className = 'backup-status';
+      document.getElementById('backup-status').textContent = '';
+      loadBackupSummary();
+    }
+    function closeBackupModal() {
+      document.getElementById('backup-modal').classList.remove('visible');
+    }
+    async function loadBackupSummary() {
+      try {
+        const result = await window.launcher.getBackupSummary();
+        if (!result.ok) { document.getElementById('backup-summary-grid').innerHTML = '<p style="color:#ff6666">Fehler beim Laden</p>'; return; }
+        const s = result.summary;
+        const check = (v) => v ? '<span class="val">Ja</span>' : '<span class="val empty">Nein</span>';
+        const num = (v) => v > 0 ? '<span class="val">' + v + '</span>' : '<span class="val empty">0</span>';
+        document.getElementById('backup-summary-grid').innerHTML =
+          '<div class="backup-card"><h4><span class="backup-section-icon">&#127968;</span> Launcher</h4><ul>' +
+          '<li>Twitch Config ' + check(s.launcher) + '</li></ul></div>' +
+          '<div class="backup-card"><h4><span class="backup-section-icon">&#128264;</span> SoundBoard</h4><ul>' +
+          '<li>Config ' + check(s.soundboard.config) + '</li>' +
+          '<li>Credentials ' + check(s.soundboard.credentials) + '</li>' +
+          '<li>YouTube Links ' + num(s.soundboard.links) + '</li>' +
+          '<li>Chat Commands ' + num(s.soundboard.commands) + '</li>' +
+          '<li style="color:#ff6666;">Blacklist ' + num(s.soundboard.blacklist) + '</li>' +
+          '<li style="color:#00ff88;">Whitelist ' + num(s.soundboard.whitelist) + '</li>' +
+          '<li>Sounds ' + num(s.soundboard.sounds) + '</li>' +
+          '<li>Videos ' + num(s.soundboard.videos) + '</li></ul></div>' +
+          '<div class="backup-card"><h4><span class="backup-section-icon">&#128131;</span> Club Dancers</h4><ul>' +
+          '<li>Config ' + check(s.dancers) + '</li>' +
+          '<li>Twitch Channel ' + check(s.dancers) + '</li>' +
+          '<li>Scene Settings ' + check(s.dancers) + '</li></ul></div>' +
+          '<div class="backup-card"><h4><span class="backup-section-icon">&#127911;</span> Dancefloor</h4><ul>' +
+          '<li>Custom Scenes ' + num(s.dancefloor.scenes) + '</li>' +
+          '<li>Effect Commands (in-memory)</li></ul></div>';
+      } catch (e) {
+        document.getElementById('backup-summary-grid').innerHTML = '<p style="color:#ff6666">' + e.message + '</p>';
+      }
+    }
+    async function doExportBackup() {
+      const btn = document.getElementById('btn-do-export');
+      const statusEl = document.getElementById('backup-status');
+      btn.disabled = true; btn.textContent = 'Exportiere...';
+      statusEl.className = 'backup-status';
+      try {
+        const result = await window.launcher.exportBackup();
+        if (!result.ok) { throw new Error(result.error); }
+        // Create JSON file download
+        const json = JSON.stringify(result.data, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const date = new Date().toISOString().slice(0, 10);
+        a.href = url; a.download = 'VTC-Backup-' + date + '.json'; a.click();
+        URL.revokeObjectURL(url);
+        statusEl.className = 'backup-status ok';
+        statusEl.textContent = 'Backup erfolgreich exportiert! (' + (json.length / 1024).toFixed(1) + ' KB)';
+      } catch (e) {
+        statusEl.className = 'backup-status err';
+        statusEl.textContent = 'Export Fehler: ' + e.message;
+      }
+      btn.disabled = false; btn.textContent = '\uD83D\uDCE4 Backup Exportieren';
+    }
+    async function doImportBackup(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      if (!confirm('Achtung! Alle aktuellen Einstellungen werden mit dem Backup ueberschrieben. Fortfahren?')) {
+        event.target.value = ''; return;
+      }
+      const statusEl = document.getElementById('backup-status');
+      statusEl.className = 'backup-status'; statusEl.textContent = 'Lese Backup-Datei...';
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        // Show what's in the backup
+        const meta = data._meta || {};
+        statusEl.textContent = 'Backup vom ' + (meta.exportDate || 'unbekannt') + ' wird wiederhergestellt...';
+        statusEl.className = 'backup-status warn';
+        const result = await window.launcher.importBackup(data);
+        if (!result.ok) { throw new Error(result.error); }
+        const r = result.restored;
+        const parts = [];
+        if (r.launcher) parts.push('Launcher');
+        if (r.soundboard.config) parts.push('SoundBoard Config');
+        if (r.soundboard.credentials) parts.push('SoundBoard Credentials');
+        if (r.dancers) parts.push('Club Dancers');
+        if (r.dancefloor) parts.push('Dancefloor Scenes');
+        statusEl.className = 'backup-status ok';
+        statusEl.textContent = 'Import erfolgreich! Wiederhergestellt: ' + parts.join(', ') + '. Bitte App neu starten.';
+        await loadBackupSummary();
+      } catch (e) {
+        statusEl.className = 'backup-status err';
+        statusEl.textContent = 'Import Fehler: ' + e.message;
+      }
+      event.target.value = '';
     }
 
     function stopAllAndQuit() {

@@ -21,7 +21,7 @@ const CONFIG_DIR = path.join(os.homedir(), '.virtualtwitchclub');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 
 console.log('='.repeat(60));
-console.log('[Launcher] Virtual Twitch Club v1.0.6');
+console.log('[Launcher] Virtual Twitch Club v1.0.7');
 console.log('[Launcher] isDev:', isDev);
 console.log('[Launcher] LAUNCHER_DIR:', LAUNCHER_DIR);
 console.log('[Launcher] APPS_DIR:', APPS_DIR);
@@ -597,6 +597,203 @@ function setupIPC() {
     soundboard: { url: 'http://localhost:3000/overlay', label: 'SoundBoard', width: 1920, height: 1080 },
     dancefloor: { url: 'http://localhost:3131/overlay.html', label: 'Dancefloor Lichtshow', width: 1920, height: 1080 }
   }));
+
+  // ── Backup & Restore ─────────────────────────────────────────────────────
+  // Full export of ALL settings across all 3 apps + launcher
+  ipcMain.handle('export-backup', () => {
+    try {
+      const backup = {
+        _meta: {
+          app: 'VirtualTwitchClub',
+          version: '1.0.7',
+          exportDate: new Date().toISOString(),
+          type: 'full-backup'
+        },
+        launcher: null,
+        soundboard: { config: null, credentials: null, mediaFiles: [] },
+        dancers: null,
+        dancefloor: { scenes: null }
+      };
+
+      // 1) Launcher config
+      try {
+        if (fs.existsSync(CONFIG_FILE)) {
+          backup.launcher = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
+        }
+      } catch (e) { console.error('[Backup] Launcher config error:', e.message); }
+
+      // 2) SoundBoard config.json (chat_commands, links, settings, file_settings)
+      try {
+        const sbConfigPath = path.join(APPS_DIR, 'soundboard', 'config.json');
+        if (fs.existsSync(sbConfigPath)) {
+          backup.soundboard.config = JSON.parse(fs.readFileSync(sbConfigPath, 'utf-8'));
+        }
+      } catch (e) { console.error('[Backup] SoundBoard config error:', e.message); }
+
+      // 3) SoundBoard credentials.enc (raw encrypted content)
+      try {
+        const sbCredPath = path.join(APPS_DIR, 'soundboard', 'credentials.enc');
+        if (fs.existsSync(sbCredPath)) {
+          backup.soundboard.credentials = fs.readFileSync(sbCredPath, 'utf-8');
+        }
+      } catch (e) { console.error('[Backup] SoundBoard credentials error:', e.message); }
+
+      // 4) SoundBoard media file lists (names only, not actual files)
+      try {
+        const soundsDir = path.join(APPS_DIR, 'soundboard', 'sounds');
+        const videosDir = path.join(APPS_DIR, 'soundboard', 'videos');
+        if (fs.existsSync(soundsDir)) {
+          backup.soundboard.mediaFiles.push({
+            type: 'sounds',
+            files: fs.readdirSync(soundsDir).filter(f => /^(mp3|wav|ogg|m4a|webm)$/i.test(path.extname(f)))
+          });
+        }
+        if (fs.existsSync(videosDir)) {
+          backup.soundboard.mediaFiles.push({
+            type: 'videos',
+            files: fs.readdirSync(videosDir).filter(f => /^(mp4|webm|avi|mov)$/i.test(path.extname(f)))
+          });
+        }
+      } catch (e) { console.error('[Backup] SoundBoard media list error:', e.message); }
+
+      // 5) Dancers config
+      try {
+        const dancersConfigFile = path.join(CONFIG_DIR, 'dancers', 'config.json');
+        if (fs.existsSync(dancersConfigFile)) {
+          backup.dancers = JSON.parse(fs.readFileSync(dancersConfigFile, 'utf-8'));
+        }
+      } catch (e) { console.error('[Backup] Dancers config error:', e.message); }
+
+      // 6) Dancefloor scenes
+      try {
+        const scenesFile = path.join(APPS_DIR, 'dancefloor', 'data', 'scenes.json');
+        if (fs.existsSync(scenesFile)) {
+          backup.dancefloor.scenes = JSON.parse(fs.readFileSync(scenesFile, 'utf-8'));
+        }
+      } catch (e) { console.error('[Backup] Dancefloor scenes error:', e.message); }
+
+      console.log('[Backup] Export complete');
+      return { ok: true, data: backup };
+    } catch (e) {
+      console.error('[Backup] Export failed:', e.message);
+      return { ok: false, error: e.message };
+    }
+  });
+
+  // Full import/restore of ALL settings
+  ipcMain.handle('import-backup', (event, backupData) => {
+    try {
+      if (!backupData || !backupData._meta || backupData._meta.type !== 'full-backup') {
+        return { ok: false, error: 'Ungueltige Backup-Datei' };
+      }
+
+      let restored = { launcher: false, soundboard: { config: false, credentials: false }, dancers: false, dancefloor: false };
+
+      // 1) Launcher config
+      try {
+        if (backupData.launcher && typeof backupData.launcher === 'object') {
+          if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
+          fs.writeFileSync(CONFIG_FILE, JSON.stringify(backupData.launcher, null, 2), 'utf-8');
+          // Re-propagate credentials to all apps
+          propagateCredentials(backupData.launcher);
+          restored.launcher = true;
+        }
+      } catch (e) { console.error('[Restore] Launcher error:', e.message); }
+
+      // 2) SoundBoard config.json
+      try {
+        if (backupData.soundboard && backupData.soundboard.config) {
+          const sbConfigPath = path.join(APPS_DIR, 'soundboard', 'config.json');
+          const sbDir = path.dirname(sbConfigPath);
+          if (!fs.existsSync(sbDir)) fs.mkdirSync(sbDir, { recursive: true });
+          fs.writeFileSync(sbConfigPath, JSON.stringify(backupData.soundboard.config, null, 2), 'utf-8');
+          restored.soundboard.config = true;
+        }
+      } catch (e) { console.error('[Restore] SoundBoard config error:', e.message); }
+
+      // 3) SoundBoard credentials.enc
+      try {
+        if (backupData.soundboard && backupData.soundboard.credentials) {
+          const sbCredPath = path.join(APPS_DIR, 'soundboard', 'credentials.enc');
+          fs.writeFileSync(sbCredPath, backupData.soundboard.credentials, 'utf-8');
+          restored.soundboard.credentials = true;
+        }
+      } catch (e) { console.error('[Restore] SoundBoard credentials error:', e.message); }
+
+      // 4) Dancers config
+      try {
+        if (backupData.dancers && typeof backupData.dancers === 'object') {
+          const dancersDir = path.join(CONFIG_DIR, 'dancers');
+          if (!fs.existsSync(dancersDir)) fs.mkdirSync(dancersDir, { recursive: true });
+          fs.writeFileSync(path.join(dancersDir, 'config.json'), JSON.stringify(backupData.dancers, null, 2), 'utf-8');
+          restored.dancers = true;
+        }
+      } catch (e) { console.error('[Restore] Dancers config error:', e.message); }
+
+      // 5) Dancefloor scenes
+      try {
+        if (backupData.dancefloor && backupData.dancefloor.scenes) {
+          const scenesDir = path.join(APPS_DIR, 'dancefloor', 'data');
+          if (!fs.existsSync(scenesDir)) fs.mkdirSync(scenesDir, { recursive: true });
+          fs.writeFileSync(path.join(scenesDir, 'scenes.json'), JSON.stringify(backupData.dancefloor.scenes, null, 2), 'utf-8');
+          restored.dancefloor = true;
+        }
+      } catch (e) { console.error('[Restore] Dancefloor scenes error:', e.message); }
+
+      console.log('[Restore] Import complete:', JSON.stringify(restored));
+      return { ok: true, restored: restored };
+    } catch (e) {
+      console.error('[Restore] Import failed:', e.message);
+      return { ok: false, error: e.message };
+    }
+  });
+
+  // ── Get Backup Summary (what would be exported) ──────────────────────────
+  ipcMain.handle('get-backup-summary', () => {
+    try {
+      const summary = { launcher: false, soundboard: { config: false, credentials: false, sounds: 0, videos: 0, links: 0, commands: 0, blacklist: 0, whitelist: 0 }, dancers: false, dancefloor: { scenes: 0 } };
+
+      // Launcher
+      summary.launcher = fs.existsSync(CONFIG_FILE);
+
+      // SoundBoard
+      try {
+        const sbConfigPath = path.join(APPS_DIR, 'soundboard', 'config.json');
+        if (fs.existsSync(sbConfigPath)) {
+          const cfg = JSON.parse(fs.readFileSync(sbConfigPath, 'utf-8'));
+          summary.soundboard.config = true;
+          summary.soundboard.links = Object.keys(cfg.links || {}).length;
+          summary.soundboard.commands = Object.keys(cfg.chat_commands || {}).length;
+          const bl = (cfg.settings || {}).blacklist_artists || [];
+          const wl = (cfg.settings || {}).whitelist_artists || [];
+          summary.soundboard.blacklist = bl.length;
+          summary.soundboard.whitelist = wl.length;
+        }
+      } catch (e) {}
+      try { summary.soundboard.credentials = fs.existsSync(path.join(APPS_DIR, 'soundboard', 'credentials.enc')); } catch (e) {}
+      try {
+        const sd = path.join(APPS_DIR, 'soundboard', 'sounds');
+        if (fs.existsSync(sd)) summary.soundboard.sounds = fs.readdirSync(sd).filter(f => /^(mp3|wav|ogg|m4a|webm)$/i.test(path.extname(f))).length;
+      } catch (e) {}
+      try {
+        const vd = path.join(APPS_DIR, 'soundboard', 'videos');
+        if (fs.existsSync(vd)) summary.soundboard.videos = fs.readdirSync(vd).filter(f => /^(mp4|webm|avi|mov)$/i.test(path.extname(f))).length;
+      } catch (e) {}
+
+      // Dancers
+      try { summary.dancers = fs.existsSync(path.join(CONFIG_DIR, 'dancers', 'config.json')); } catch (e) {}
+
+      // Dancefloor
+      try {
+        const sf = path.join(APPS_DIR, 'dancefloor', 'data', 'scenes.json');
+        if (fs.existsSync(sf)) summary.dancefloor.scenes = JSON.parse(fs.readFileSync(sf, 'utf-8')).length;
+      } catch (e) {}
+
+      return { ok: true, summary: summary };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  });
 
   ipcMain.on('show-setup', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {

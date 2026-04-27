@@ -1,6 +1,6 @@
 {
   "name": "virtual-twitch-club",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Virtual Twitch Club - All-in-One Launcher for VirtualClubDancers, TwitchSoundBoard & TwitchDancefloor",
   "main": "src/main.js",
   "scripts": {

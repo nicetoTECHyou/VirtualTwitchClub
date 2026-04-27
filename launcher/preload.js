@@ -35,6 +35,11 @@ contextBridge.exposeInMainWorld('launcher', {
   // OBS
   getOBSUrls: () => ipcRenderer.invoke('get-obs-urls'),
 
+  // Backup & Restore
+  exportBackup: () => ipcRenderer.invoke('export-backup'),
+  importBackup: (data) => ipcRenderer.invoke('import-backup', data),
+  getBackupSummary: () => ipcRenderer.invoke('get-backup-summary'),
+
   // Setup
   showSetup: () => ipcRenderer.send('show-setup'),
 });
